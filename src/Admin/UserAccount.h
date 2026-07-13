@@ -1,0 +1,3 @@
+#pragma once
+#include <juce_data_structures/juce_data_structures.h>
+namespace vox {enum class Role{User,Moderator,Administrator,SuperAdministrator};enum class UserStatus{Active,Inactive,Blocked,Pending};enum class Permission{ViewLogs,ExportLogs,ManagePresets,CreateBackup,RestoreBackup,ManageUsers,ManagePermissions,ManageSecurity,ManageSettings,DeleteLogs};juce::String roleName(Role);juce::String statusName(UserStatus);struct UserAccount{juce::String id,name,email,windowsIdentity;Role role=Role::User;UserStatus status=UserStatus::Active;juce::Time created,lastAccess;juce::var toJson()const;static UserAccount fromJson(const juce::var&);};}
