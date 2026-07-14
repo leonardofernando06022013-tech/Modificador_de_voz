@@ -35,6 +35,28 @@ juce::StringArray PresetManager::names() const {
   return result;
 }
 
+juce::String PresetManager::categoryFor(const juce::String &name) const {
+  for (int i = 0; i < generatedVoiceCount; ++i)
+    if (name == generatedName(i))
+      return generatedCategory(i);
+  if (dir.getChildFile(juce::File::createLegalFileName(name) + ".json")
+          .existsAsFile())
+    return "Personalizadas";
+  if (name == "Masculina grave") return "Graves";
+  if (name == "Personagem infantil") return "Agudas";
+  if (name == juce::String::fromUTF8("Robô"))
+    return juce::String::fromUTF8("Robôs");
+  if (name == juce::String::fromUTF8("Rádio policial"))
+    return juce::String::fromUTF8("Rádio");
+  if (name == "Telefone") return "Dispositivos";
+  if (name == juce::String::fromUTF8("Demônio") || name == "Monstro")
+    return "Terror";
+  if (name == "Voz normal limpa" || name == "Feminina suave" ||
+      name == "Narrador")
+    return "Naturais";
+  return "Criativas";
+}
+
 bool PresetManager::save(const juce::String &name, const Parameters &p) const {
   const auto safe = juce::File::createLegalFileName(name.trim());
   return safe.isNotEmpty() && dir.getChildFile(safe + ".json").replaceWithText(

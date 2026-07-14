@@ -78,6 +78,7 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   setupToggle(telemetry, "Telemetria (sempre desativada)", false);
   telemetry.setEnabled(false);
   setupToggle(autoUpdates, "Atualizacao automatica", false);
+  loadPreferences();
   juce::ComboBox *preferenceCombos[]{&themeBox, &fontSize,
                                      &scale,    &processPriority, &meterRate,
                                      &logLevel};
@@ -91,6 +92,16 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
       &autoUpdates};
   for (auto *t : preferenceToggles)
     t->onClick = [this] { markDirty(); };
+  cpuOptimization.onClick = [this] {
+    if (cpuOptimization.getToggleState() && buffer.getSelectedId() < 3)
+      buffer.setSelectedId(3, juce::sendNotificationSync);
+    markDirty();
+  };
+  economy.onClick = [this] {
+    if (economy.getToggleState())
+      buffer.setSelectedId(4, juce::sendNotificationSync);
+    markDirty();
+  };
   buffer.onChange = [this] { applyDevice(buffer.getText().getIntValue(), 0); };
   sampleRate.onChange = [this] {
     applyDevice(0, sampleRate.getText().getDoubleValue());
@@ -207,9 +218,70 @@ void SettingsPage::setupToggle(juce::ToggleButton &t, const juce::String &n,
   t.setToggleState(state, juce::dontSendNotification);
 }
 void SettingsPage::markDirty() {
+  persistPreferences();
   dirty = true;
   saveStatus.setText(localization.text("settings.saving"), juce::dontSendNotification);
   startTimer(550);
+}
+void SettingsPage::loadPreferences() {
+  auto loadToggle = [this](juce::ToggleButton &toggle, const char *key) {
+    const auto fallback = toggle.getToggleState() ? "1" : "0";
+    toggle.setToggleState(settings.preference(key, fallback) == "1",
+                          juce::dontSendNotification);
+  };
+  auto loadCombo = [this](juce::ComboBox &combo, const char *key) {
+    combo.setSelectedId(settings.preference(key, juce::String(combo.getSelectedId()))
+                            .getIntValue(),
+                        juce::dontSendNotification);
+  };
+  loadToggle(compact, "compact");
+  loadToggle(reduceAnimations, "reduceAnimations");
+  loadToggle(showTips, "showTips");
+  loadToggle(autoContext, "autoContext");
+  loadToggle(cpuOptimization, "cpuOptimization");
+  loadToggle(adaptiveQuality, "adaptiveQuality");
+  loadToggle(economy, "economy");
+  loadToggle(highContrast, "highContrast");
+  loadToggle(focusVisible, "focusVisible");
+  loadToggle(largeClick, "largeClick");
+  loadToggle(keyboardNav, "keyboardNav");
+  loadToggle(saveLogs, "saveLogs");
+  loadToggle(autoUpdates, "autoUpdates");
+  loadCombo(themeBox, "theme");
+  loadCombo(fontSize, "fontSize");
+  loadCombo(scale, "scale");
+  loadCombo(processPriority, "processPriority");
+  loadCombo(meterRate, "meterRate");
+  loadCombo(logLevel, "logLevel");
+}
+void SettingsPage::persistPreferences() {
+  auto saveToggle = [this](const char *key, const juce::ToggleButton &toggle) {
+    settings.setPreference(key, toggle.getToggleState() ? "1" : "0");
+  };
+  auto saveCombo = [this](const char *key, const juce::ComboBox &combo) {
+    settings.setPreference(key, juce::String(combo.getSelectedId()));
+  };
+  saveToggle("compact", compact);
+  saveToggle("reduceAnimations", reduceAnimations);
+  saveToggle("showTips", showTips);
+  saveToggle("autoContext", autoContext);
+  saveToggle("cpuOptimization", cpuOptimization);
+  saveToggle("adaptiveQuality", adaptiveQuality);
+  saveToggle("economy", economy);
+  saveToggle("highContrast", highContrast);
+  saveToggle("focusVisible", focusVisible);
+  saveToggle("largeClick", largeClick);
+  saveToggle("keyboardNav", keyboardNav);
+  saveToggle("saveLogs", saveLogs);
+  saveToggle("autoUpdates", autoUpdates);
+  saveCombo("theme", themeBox);
+  saveCombo("fontSize", fontSize);
+  saveCombo("scale", scale);
+  saveCombo("processPriority", processPriority);
+  saveCombo("meterRate", meterRate);
+  saveCombo("logLevel", logLevel);
+  if (onPreferencesChanged)
+    onPreferencesChanged();
 }
 void SettingsPage::timerCallback() {
   stopTimer();

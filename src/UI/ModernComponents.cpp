@@ -167,20 +167,21 @@ void VoiceCardComponent::drawAvatar(juce::Graphics &g,
 }
 void VoiceCardComponent::paintButton(juce::Graphics &g, bool hover, bool down) {
   auto r = getLocalBounds().toFloat().reduced(3);
+  const bool animateHover = hover && !theme::reduceAnimations.load();
   g.setColour(selected ? theme::elevated.brighter(.05f)
-                       : (hover ? theme::elevated : theme::panel));
+                       : (animateHover ? theme::elevated : theme::panel));
   g.fillRoundedRectangle(r, 11);
-  if (hover) {
+  if (animateHover) {
     g.setColour(theme::purple.withAlpha(.13f));
     g.fillRoundedRectangle(r.reduced(2), 10);
   }
   g.setColour(selected
                   ? theme::purple.brighter(.2f)
-                  : (hover ? theme::border.brighter(.25f) : theme::border));
+                  : (animateHover ? theme::border.brighter(.25f) : theme::border));
   g.drawRoundedRectangle(r, 11, selected ? 2.0f : 1.0f);
   auto avatar =
       juce::Rectangle<float>(r.getCentreX() - 38, r.getY() + 16, 76, 76);
-  if (hover)
+  if (animateHover)
     avatar = avatar.expanded(1.2f);
   drawAvatar(g, avatar);
   if (selected) {

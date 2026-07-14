@@ -44,6 +44,7 @@ private:
     static constexpr int maximumRealtimeBlockSize = 8192;
     juce::AudioDeviceManager devices, monitorDevices; Parameters params; VoiceProcessor voice{params}; juce::AudioBuffer<float> work;
     juce::AudioFormatManager soundboardFormats;
+    juce::TimeSliceThread soundboardReadAhead{"Soundboard read-ahead"};
     std::unique_ptr<juce::AudioFormatReaderSource> soundboardReader;
     juce::AudioTransportSource soundboardTransport;
     juce::AudioBuffer<float> soundboardBuffer;

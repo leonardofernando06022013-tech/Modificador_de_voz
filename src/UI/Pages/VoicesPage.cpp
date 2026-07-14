@@ -73,45 +73,11 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
   viewport.setViewedComponent(&grid, false);
   viewport.setScrollBarsShown(true, false);
   addAndMakeVisible(viewport);
-  const juce::StringArray names{"Voz Limpa",
-                                "Grave Profunda",
-                                "Feminina Suave",
-                                juce::String::fromUTF8("Robô"),
-                                juce::String::fromUTF8("Rádio"),
-                                "Telefone",
-                                juce::String::fromUTF8("Demônio"),
-                                juce::String::fromUTF8("Alienígena"),
-                                "Megafone",
-                                juce::String::fromUTF8("Voz Metálica"),
-                                "Personagem Infantil",
-                                "Narrador",
-                                "Monstro",
-                                "Eco Espacial",
-                                "Som Digital",
-                                "Grave Suave",
-                                "Aguda",
-                                juce::String::fromUTF8("Robô Pesado")};
-  const juce::StringArray categories{"Naturais",
-                                     "Graves",
-                                     "Naturais",
-                                     juce::String::fromUTF8("Robôs"),
-                                     juce::String::fromUTF8("Rádio"),
-                                     "Dispositivos",
-                                     "Terror",
-                                     "Criativas",
-                                     "Criativas",
-                                     juce::String::fromUTF8("Robôs"),
-                                     "Criativas",
-                                     "Naturais",
-                                     "Terror",
-                                     "Criativas",
-                                     "Criativas",
-                                     "Graves",
-                                     "Agudas",
-                                     juce::String::fromUTF8("Robôs")};
+  const auto names = presets.names();
   auto favourites = settings.favourites();
   for (int i = 0; i < names.size(); ++i) {
-    auto *c = cards.add(new VoiceCardComponent(names[i], categories[i], i));
+    auto *c = cards.add(
+        new VoiceCardComponent(names[i], presets.categoryFor(names[i]), i));
     c->setSelected(i == 0);
     c->setFavourite(favourites.contains(names[i]));
     c->onClick = [this, i] { applyVoice(i); };
@@ -124,25 +90,9 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
     };
     grid.addAndMakeVisible(c);
   }
-  for (int i = 0; i < PresetManager::generatedVoiceCount; ++i) {
-    const auto name = PresetManager::generatedName(i);
-    auto *card = cards.add(new VoiceCardComponent(
-        name, PresetManager::generatedCategory(i), i + 20));
-    card->setFavourite(favourites.contains(name));
-    card->onClick = [this, card] { applyVoice(cards.indexOf(card)); };
-    card->onFavourite = [this, card](bool value) {
-      settings.setFavourite(card->presetName(), value);
-      if (activeFilter == "Favoritas")
-        updateFilter();
-    };
-    grid.addAndMakeVisible(card);
-  }
-  for (const auto &file : presets.directory().findChildFiles(
-           juce::File::findFiles, false, "*.json"))
-    addCustomVoiceCard(file.getFileNameWithoutExtension(), false);
   selectedCaption.setText("VOZ SELECIONADA", juce::dontSendNotification);
   selectedName.setText(names[0], juce::dontSendNotification);
-  selectedType.setText(categories[0], juce::dontSendNotification);
+  selectedType.setText(presets.categoryFor(names[0]), juce::dontSendNotification);
   setupLabel(selectedCaption, 10, theme::muted, true);
   setupLabel(selectedName, 17, theme::text, true);
   setupLabel(selectedType, 12, theme::muted);
@@ -259,6 +209,7 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
 
 void VoicesPage::selectDetailsSection(DetailsSection section) {
   selectedSection = section;
+  sectionViewport.setVisible(section != DetailsSection::None);
   const juce::StringArray names{
       "Voz",
       "Equalizador",
@@ -375,9 +326,6 @@ bool VoicesPage::runSmokeTest() {
   for (const auto size : sizes) {
     setBounds(0, 0, size.x, size.y);
     resized();
-    juce::Array<juce::Rectangle<int>> fixedHeaders;
-    for (auto *button : accordions)
-      fixedHeaders.add(button->getBounds());
     const auto fixedPanel = detailsArea;
     const auto fixedGrid = gridArea;
     const auto fixedSave = saveButton.getBounds();
@@ -389,11 +337,11 @@ bool VoicesPage::runSmokeTest() {
           saveButton.getBounds() != fixedSave ||
           resetButton.getBounds() != fixedReset)
         return false;
-      for (int i = 0; i < accordions.size(); ++i)
-        if (accordions[i]->getBounds() != fixedHeaders[i] ||
-            (i > 0 && accordions[i]->getY() <= accordions[i - 1]->getBottom()))
+      for (int i = 1; i < accordions.size(); ++i)
+        if (accordions[i]->getY() <= accordions[i - 1]->getBottom())
           return false;
-      if (sectionViewport.getBounds().isEmpty())
+      if (section != 0 && (!sectionViewport.isVisible() ||
+                           sectionViewport.getBounds().isEmpty()))
         return false;
     }
   }
@@ -418,23 +366,7 @@ void VoicesPage::applyVoice(int index) {
   for (int i = 0; i < cards.size(); ++i)
     cards[i]->setSelected(i == index);
   auto name = selectedVoice();
-  juce::String factory = name;
-  if (name == "Voz Limpa")
-    factory = "Voz normal limpa";
-  else if (name.contains("Grave"))
-    factory = "Masculina grave";
-  else if (name == "Aguda" || name == "Personagem Infantil")
-    factory = "Personagem infantil";
-  else if (name.contains(juce::String::fromUTF8("Robô")) ||
-           name == juce::String::fromUTF8("Voz Metálica") ||
-           name == "Som Digital")
-    factory = juce::String::fromUTF8("Robô");
-  else if (name == juce::String::fromUTF8("Rádio"))
-    factory = juce::String::fromUTF8("Rádio policial");
-  else if (name == juce::String::fromUTF8("Alienígena") ||
-           name == "Eco Espacial")
-    factory = juce::String::fromUTF8("Alienígena");
-  presets.load(factory, engine.parameters());
+  presets.load(name, engine.parameters());
   selectedName.setText(name, juce::dontSendNotification);
   selectedType.setText(selectedCategory(), juce::dontSendNotification);
   favouriteButton.setButtonText(cards[index]->isFavourite()
@@ -547,10 +479,20 @@ void VoicesPage::resized() {
     sliders[i]->setBounds(row);
   }
   d.removeFromTop(4);
-  for (auto *b : accordions)
-    b->setBounds(d.removeFromTop(compactDetails ? 27 : 30).reduced(0, 1));
-  d.removeFromTop(5);
-  sectionViewport.setBounds(d);
+  const int accordionHeight = compactDetails ? 27 : 30;
+  const int selectedAccordion = selectedSection == DetailsSection::None
+                                    ? -1
+                                    : static_cast<int>(selectedSection) - 1;
+  sectionViewport.setBounds({});
+  for (int i = 0; i < accordions.size(); ++i) {
+    accordions[i]->setBounds(d.removeFromTop(accordionHeight).reduced(0, 1));
+    if (i == selectedAccordion) {
+      const int availableAfterHeaders =
+          d.getHeight() - (accordions.size() - i - 1) * accordionHeight;
+      const int contentHeight = juce::jlimit(58, 120, availableAfterHeaders);
+      sectionViewport.setBounds(d.removeFromTop(contentHeight).reduced(0, 3));
+    }
+  }
   sectionContent.setSize(juce::jmax(180, d.getWidth() - 10), 120);
   sectionTitle.setBounds(10, 8, sectionContent.getWidth() - 20, 22);
   sectionBody.setBounds(10, 34, sectionContent.getWidth() - 20, 80);

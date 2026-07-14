@@ -46,7 +46,11 @@ public:
                 utf8("Use modifica\xC3\xA7\xC3\xA3o de voz com consentimento. O \xC3\xA1udio \xC3\xA9 processado localmente e n\xC3\xA3o \xC3\xA9 gravado nem enviado."));
         }
         if (commandLine.contains("--ui-smoke-test"))
-            juce::MessageManager::callAsync([this] { if (window) if (auto* main = dynamic_cast<MainComponent*>(window->getContentComponent())) main->runNavigationSmokeTest(); systemRequestedQuit(); });
+            juce::MessageManager::callAsync([this] {
+                auto* main = window ? dynamic_cast<MainComponent*>(window->getContentComponent()) : nullptr;
+                setApplicationReturnValue(main && main->runNavigationSmokeTest() ? 0 : 1);
+                systemRequestedQuit();
+            });
     }
 
     void shutdown() override {

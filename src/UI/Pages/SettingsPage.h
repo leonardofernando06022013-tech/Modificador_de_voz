@@ -12,12 +12,15 @@ public:
   void resized() override;
   bool runLanguageSmokeTest();
   std::function<void()> onOpenDevices;
+  std::function<void()> onPreferencesChanged;
 
 private:
   void timerCallback() override;
   void markDirty();
   void applyDevice(int, double);
   void restoreDefaults();
+  void loadPreferences();
+  void persistPreferences();
   void updateTexts();
   void setupCombo(juce::ComboBox &, const juce::StringArray &, int);
   void setupToggle(juce::ToggleButton &, const juce::String &, bool);
