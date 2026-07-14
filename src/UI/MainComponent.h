@@ -41,9 +41,9 @@ private:
       selectedCategory, status, cpuLatency, deviceName, bottomVoiceName,
       bottomVoiceCategory, searchShortcut;
   juce::TextEditor search, diagnosticText;
-  juce::TextButton clearSearch{juce::String::fromUTF8("×")},
-      deviceStatus{"Audio"}, configure{"Configurar dispositivos"},
-      copyDiagnostic{"Copiar relatorio"};
+  juce::TextButton clearSearch{juce::String::fromUTF8("\xc3\x97")},
+      deviceStatus{"Audio"}, configure{juce::String::fromUTF8("Configurar dispositivos")},
+      copyDiagnostic{juce::String::fromUTF8("Copiar relat\xc3\xb3rio")};
   juce::TextButton notifications{juce::String::fromUTF8("●")}, helpButton{"?"},
       topSettings{juce::String::fromUTF8("⚙")},
       profile{juce::String::fromUTF8("●")};
@@ -54,7 +54,7 @@ private:
   juce::Component details;
   juce::OwnedArray<juce::Label> parameterLabels;
   juce::OwnedArray<juce::Slider> parameterSliders;
-  juce::TextButton savePreset{"Salvar alteracoes"}, duplicatePreset{"Duplicar"},
+  juce::TextButton savePreset{juce::String::fromUTF8("Salvar altera\xc3\xa7\xc3\xb5\x65s")}, duplicatePreset{"Duplicar"},
       resetPreset{"Restaurar"};
   juce::AudioDeviceSelectorComponent devices;
   AudioLevelMeter meter;

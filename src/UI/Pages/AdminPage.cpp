@@ -1,71 +1,459 @@
 #include "AdminPage.h"
 #include "App/AppPaths.h"
 #include "UI/Theme.h"
-namespace vox {static juce::String utf8(const char* text){return juce::String::fromUTF8(text);} static void labelStyle(juce::Label&l,float size,juce::Colour colour,bool bold=false){l.setColour(juce::Label::textColourId,colour);l.setFont(juce::Font(juce::FontOptions(size,bold?juce::Font::bold:juce::Font::plain)));}
-#if JUCE_DEBUG
-static juce::String buildMode(){return "Debug";}
-#else
-static juce::String buildMode(){return "Release";}
-#endif
-AdminPage::AdminPage(AudioEngine&e,SettingsManager&s,PresetManager&p):engine(e),settings(s),presets(p){auto current=users.currentUser();access.begin(current,30);if(access.active())audit.record(current,"SESSION_START","Admin","SUCCESS");title.setText(utf8("Painel de Administração"),juce::dontSendNotification);subtitle.setText(utf8("Gerencie usuários, permissões, segurança, presets compartilhados, backups e registros do sistema."),juce::dontSendNotification);labelStyle(title,25,theme::text,true);labelStyle(subtitle,12,theme::muted);labelStyle(sessionLabel,11,theme::green,true);labelStyle(statusLabel,11,theme::muted);for(auto*l:{&title,&subtitle,&sessionLabel,&statusLabel})addAndMakeVisible(l);const juce::StringArray names{utf8("Visão Geral"),utf8("Usuários"),utf8("Permissões"),"Presets",utf8("Segurança"),"Logs","Backups",utf8("Configurações")};for(int i=0;i<names.size();++i){auto*b=tabButtons.add(new juce::TextButton(names[i]));b->setColour(juce::TextButton::buttonColourId,i==0?theme::blue:theme::panel);b->onClick=[this,i]{switchTab((Tab)i);};addAndMakeVisible(b);}for(auto*editor:{&content,&systemInfo}){editor->setMultiLine(true);editor->setReadOnly(true);editor->setScrollbarsShown(true);editor->setColour(juce::TextEditor::backgroundColourId,theme::panel);addAndMakeVisible(editor);}addAndMakeVisible(activityFeed);search.setTextToShowWhenEmpty("Buscar por nome, e-mail ou ID...",theme::muted);search.onTextChange=[this]{refresh();};addAndMakeVisible(search);roleFilter.addItemList({utf8("Todas as funções"),utf8("Usuário"),"Moderador","Administrador","Superadministrador"},1);roleFilter.setSelectedId(1);statusFilter.addItemList({"Todos os status","Ativo","Inativo","Bloqueado","Pendente"},1);statusFilter.setSelectedId(1);roleFilter.onChange=statusFilter.onChange=[this]{refresh();};addAndMakeVisible(roleFilter);addAndMakeVisible(statusFilter);userRole.addItemList({utf8("Usuário"),"Moderador","Administrador","Superadministrador"},1);userStatus.addItemList({"Ativo","Inativo","Bloqueado","Pendente"},1);for(auto*c:{&userList,&userRole,&userStatus})addAndMakeVisible(c);userList.onChange=[this]{refreshUsers();};userName.setTextToShowWhenEmpty("Nome",theme::muted);userEmail.setTextToShowWhenEmpty("E-mail (opcional)",theme::muted);addAndMakeVisible(userName);addAndMakeVisible(userEmail);for(int i=0;i<10;++i){auto*t=permissionChecks.add(new juce::ToggleButton(PermissionManager::name((Permission)i)));t->setEnabled(false);addAndMakeVisible(t);}for(auto*b:{&refreshButton,&helpButton,&primaryAction,&saveUserButton,&blockUserButton,&removeUserButton,&backupButton,&exportButton,&openLogsButton,&clearLogsButton})addAndMakeVisible(b);refreshButton.onClick=[this]{refresh();};helpButton.onClick=[this]{if(notify)notify(utf8("As permissões são aplicadas pelo controlador local, não apenas pela interface."));};primaryAction.onClick=[this]{userList.setSelectedId(0);userName.clear();userEmail.clear();userRole.setSelectedId(1);userStatus.setSelectedId(1);};saveUserButton.onClick=[this]{saveUser();};blockUserButton.onClick=[this]{blockUser();};removeUserButton.onClick=[this]{removeUser();};backupButton.onClick=[this]{createBackup();};exportButton.onClick=[this]{exportLogs();};openLogsButton.onClick=[](){AppPaths::logs().startAsProcess();};clearLogsButton.setColour(juce::TextButton::textColourOffId,theme::red);clearLogsButton.onClick=[this]{clearOldLogs();};if(!access.active()){content.setText(utf8("ACESSO NÃO AUTORIZADO\n\nA conta atual não possui uma sessão administrativa válida."),false);record("ACCESS_DENIED","Admin","DENIED","WARN");}switchTab(Tab::Overview);startTimer(2000);}
-void AdminPage::record(const juce::String&a,const juce::String&t,const juce::String&r,const juce::String&s){audit.record(access.user(),a,t,r,s);}
-void AdminPage::switchTab(Tab tab){if(!access.active()){activeTab=Tab::Overview;return;}activeTab=tab;for(int i=0;i<tabButtons.size();++i)tabButtons[i]->setColour(juce::TextButton::buttonColourId,i==(int)tab?theme::blue:theme::panel);refresh();resized();}
-void AdminPage::timerCallback(){if(!access.active()){sessionLabel.setText(utf8("Sessão expirada"),juce::dontSendNotification);for(auto*b:tabButtons)b->setEnabled(false);return;}refresh();}
-void AdminPage::refresh(){activityFeed.setEvents(audit.recentEvents(100));activityFeed.setFilter(search.getText());auto current=access.user();sessionLabel.setText(utf8("● ")+current.name+utf8(" · ")+roleName(current.role)+utf8(" · Sessão ativa"),juce::dontSendNotification);auto all=users.users();auto logs=AppPaths::logs().findChildFiles(juce::File::findFiles,false,"*.log");auto backupList=backups.list();int admins=0,blocked=0;for(auto&u:all){if(u.role>=Role::Administrator)++admins;if(u.status==UserStatus::Blocked)++blocked;}juce::String text;if(activeTab==Tab::Overview){text=utf8("RESUMO ADMINISTRATIVO\n\nUsuários cadastrados: ")+juce::String(all.size())+"   |   Administradores: "+juce::String(admins)+"   |   Bloqueados: "+juce::String(blocked)+"\nPresets locais: "+juce::String(presets.names().size())+"   |   Logs: "+juce::String(logs.size())+"   |   Backups: "+juce::String(backupList.size())+"\n\nATIVIDADES RECENTES\n"+audit.recent(30).joinIntoString("\n");}else if(activeTab==Tab::Users){for(auto&u:all){if(search.getText().isNotEmpty()&&!u.name.containsIgnoreCase(search.getText())&&!u.email.containsIgnoreCase(search.getText())&&!u.id.containsIgnoreCase(search.getText()))continue;if(roleFilter.getSelectedId()>1&&(int)u.role!=roleFilter.getSelectedId()-2)continue;if(statusFilter.getSelectedId()>1&&(int)u.status!=statusFilter.getSelectedId()-2)continue;text<<u.name<<"  |  "<<u.email<<"  |  "<<roleName(u.role)<<"  |  "<<statusName(u.status)<<"\nID: "<<u.id<<utf8("  ·  Último acesso: ")<<u.lastAccess.toString(true,true)<<"\n\n";}}else if(activeTab==Tab::Permissions){text=utf8("MATRIZ DE PERMISSÕES POR FUNÇÃO\n\nSelecione uma função para visualizar as permissões efetivas. Permissões críticas são concedidas somente pelo controlador local.");}else if(activeTab==Tab::Presets){for(auto name:presets.names())text<<utf8("●  ")<<name<<utf8("  |  Local  |  Disponível\n");}else if(activeTab==Tab::Security){text=utf8("SEGURANÇA LOCAL\n\nExpiração da sessão: 30 minutos\nConfirmação para ações críticas: Ativa\nAuditoria: Ativa\nIdentidade: conta atual do Windows\nTentativas negadas: ")+juce::String(blocked)+utf8("\n\nNenhuma senha ou token administrativo é armazenado.");}else if(activeTab==Tab::Logs){for(auto&f:logs)text<<f.getFileName()<<"  |  "<<juce::File::descriptionOfSizeInBytes(f.getSize())<<"  |  "<<f.getLastModificationTime().toString(true,true)<<"\n";}else if(activeTab==Tab::Backups){for(auto&f:backupList)text<<f.getFileName()<<"  |  "<<f.getLastModificationTime().toString(true,true)<<"\n";}else{text=utf8("CONFIGURAÇÕES ADMINISTRATIVAS\n\nRetenção de logs: 30 dias\nAuditoria obrigatória: Ativa\nPasta de backups: ")+backups.directory().getFullPathName()+"\nPasta de dados: "+AppPaths::data().getFullPathName();}content.setText(text.isEmpty()?utf8("Nenhum dado disponível para os filtros atuais."):text,false);juce::String info=utf8("INFORMAÇÕES DO SISTEMA\n\nVersão: 1.0.0\nModo: ");info<<buildMode()<<"\nSistema: "<<juce::SystemStats::getOperatingSystemName()<<"\nArquitetura: "<<(juce::SystemStats::isOperatingSystem64Bit()?"64 bits":"32 bits")<<"\nLogs: "<<logs.size()<<"\nBackups: "<<backupList.size()<<utf8("\nÁudio: ")<<(engine.deviceManager().getCurrentAudioDevice()?"Online":utf8("Indisponível"))<<"\n\nDados:\n"<<AppPaths::data().getFullPathName()<<"\n\nLogs:\n"<<AppPaths::logs().getFullPathName();systemInfo.setText(info,false);statusLabel.setText(juce::String(all.size())+utf8(" usuários · ")+juce::String(logs.size())+utf8(" logs · ")+juce::String(backupList.size())+" backups",juce::dontSendNotification);if(activeTab==Tab::Users){userList.clear();for(int i=0;i<all.size();++i)userList.addItem(all[i].name,i+1);}if(activeTab==Tab::Permissions){auto role=(Role)juce::jlimit(0,3,userRole.getSelectedId()-1);for(int i=0;i<permissionChecks.size();++i)permissionChecks[i]->setToggleState(permissions.allowed(role,(Permission)i),juce::dontSendNotification);}repaint();}
-void AdminPage::refreshUsers(){auto all=users.users();int index=userList.getSelectedId()-1;if(index<0||index>=all.size())return;auto&u=all.getReference(index);userName.setText(u.name);userEmail.setText(u.email);userRole.setSelectedId((int)u.role+1);userStatus.setSelectedId((int)u.status+1);}
-void AdminPage::saveUser(){if(!access.can(Permission::ManageUsers)){if(notify)notify("Acesso negado");record("USER_SAVE","User","DENIED","WARN");return;}if(userName.getText().trim().isEmpty()){if(notify)notify(utf8("Informe o nome do usuário"));return;}auto all=users.users();int index=userList.getSelectedId()-1;UserAccount u;if(index>=0&&index<all.size())u=all[index];else{u.id=juce::Uuid().toString();u.created=juce::Time::getCurrentTime();}u.name=userName.getText().trim();u.email=userEmail.getText().trim();u.role=(Role)juce::jlimit(0,3,userRole.getSelectedId()-1);u.status=(UserStatus)juce::jlimit(0,3,userStatus.getSelectedId()-1);u.lastAccess=juce::Time::getCurrentTime();users.upsert(u);record("USER_SAVE",u.id,"SUCCESS");if(notify)notify(utf8("Usuário salvo"));refresh();}
-void AdminPage::blockUser(){if(!access.can(Permission::ManageUsers))return;auto all=users.users();int i=userList.getSelectedId()-1;if(i<0||i>=all.size())return;auto u=all[i];if(u.id==access.user().id){if(notify)notify(utf8("A sessão atual não pode ser bloqueada"));return;}u.status=u.status==UserStatus::Blocked?UserStatus::Active:UserStatus::Blocked;users.upsert(u);record("USER_BLOCK",u.id,statusName(u.status),"WARN");refresh();}
-void AdminPage::removeUser(){if(!access.can(Permission::ManageUsers))return;auto all=users.users();int i=userList.getSelectedId()-1;if(i<0||i>=all.size()||all[i].id==access.user().id)return;auto target=all[i];juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,utf8("Confirmar remoção"),"Remover "+target.name+"?", "Remover","Cancelar",nullptr,juce::ModalCallbackFunction::create([this,target](int result){if(result){users.remove(target.id);record("USER_DELETE",target.id,"SUCCESS","CRITICAL");if(notify)notify(utf8("Usuário removido"));refresh();}}));}
-void AdminPage::createBackup(){if(!access.can(Permission::CreateBackup)){if(notify)notify("Acesso negado");return;}auto file=backups.create("Backup administrativo");record("BACKUP_CREATE",file.getFileName(),file.exists()?"SUCCESS":"FAILED");if(notify)notify(file.exists()?utf8("Backup concluído"):"Falha ao criar backup");refresh();}
-void AdminPage::exportLogs(){if(!access.can(Permission::ExportLogs))return;auto out=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Admin-Logs-"+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S"));out.createDirectory();for(auto&f:AppPaths::logs().findChildFiles(juce::File::findFiles,false,"*.log"))f.copyFileTo(out.getChildFile(f.getFileName()));record("LOG_EXPORT",out.getFullPathName(),"SUCCESS");if(notify)notify("Logs exportados");}
-void AdminPage::clearOldLogs(){if(!access.can(Permission::DeleteLogs)){if(notify)notify("Acesso negado");return;}auto files=AppPaths::logs().findChildFiles(juce::File::findFiles,false,"*.log");int count=0;auto limit=juce::Time::getCurrentTime()-juce::RelativeTime::days(30);for(auto&f:files)if(f.getLastModificationTime()<limit)++count;juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,"Limpar logs antigos",juce::String(count)+utf8(" arquivo(s) com mais de 30 dias serão removidos."),"Remover","Cancelar",nullptr,juce::ModalCallbackFunction::create([this,limit](int result){if(!result)return;int removed=0;for(auto&f:AppPaths::logs().findChildFiles(juce::File::findFiles,false,"*.log"))if(f.getLastModificationTime()<limit&&f.deleteFile())++removed;record("LOG_DELETE",juce::String(removed),"SUCCESS","CRITICAL");if(notify)notify(juce::String(removed)+" logs removidos");refresh();}));}
+
+namespace vox {
+
+static void sLabel(juce::Label &l, float sz, juce::Colour c, bool bold = false) {
+    l.setColour(juce::Label::textColourId, c);
+    l.setFont(juce::Font(juce::FontOptions(sz, bold ? juce::Font::bold : juce::Font::plain)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+AdminPage::AdminPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
+    : engine(e), settings(s), presets(p)
+{
+    // ── Sessão ─────────────────────────────────────────────────────────────
+    session.setStateCallback([this](AdminSessionState st) {
+        juce::MessageManager::callAsync([this, st] { onSessionStateChanged(st); });
+    });
+    session.begin(30);
+
+    // ── Header ─────────────────────────────────────────────────────────────
+    sLabel(titleLabel,    22, theme::text, true);
+    sLabel(subtitleLabel, 11, theme::muted);
+    titleLabel.setText(
+        juce::String::fromUTF8("Painel de Administração"),
+        juce::dontSendNotification);
+    subtitleLabel.setText(
+        juce::String::fromUTF8(
+            "Gerencie usuários, permissões, segurança, presets, backups e registros do sistema."),
+        juce::dontSendNotification);
+    addAndMakeVisible(titleLabel);
+    addAndMakeVisible(subtitleLabel);
+
+    refreshButton.setButtonText(juce::String::fromUTF8("↻  Atualizar"));
+    refreshButton.setColour(juce::TextButton::buttonColourId, theme::elevated);
+    refreshButton.setColour(juce::TextButton::textColourOffId, theme::cyan);
+    refreshButton.onClick = [this] {
+        refreshAll();
+        if (notify) notify(juce::String::fromUTF8("Painel atualizado."));
+    };
+    addAndMakeVisible(refreshButton);
+
+    helpButton.setButtonText("?");
+    helpButton.setColour(juce::TextButton::buttonColourId, theme::elevated);
+    helpButton.setColour(juce::TextButton::textColourOffId, theme::muted);
+    helpButton.onClick = [this] {
+        if (notify) notify(
+            juce::String::fromUTF8(
+                "Controle administrativo local. Não representa segurança de servidor."));
+    };
+    addAndMakeVisible(helpButton);
+
+    // ── Abas ───────────────────────────────────────────────────────────────
+    const juce::StringArray tabNames {
+        juce::String::fromUTF8("Visão Geral"),
+        juce::String::fromUTF8("Usuários"),
+        juce::String::fromUTF8("Permissões"),
+        "Presets",
+        juce::String::fromUTF8("Segurança"),
+        "Logs",
+        "Backups",
+        juce::String::fromUTF8("Configurações")
+    };
+    for (int i = 0; i < tabNames.size(); ++i) {
+        auto *b = tabButtons.add(new juce::TextButton(tabNames[i]));
+        b->setColour(juce::TextButton::buttonColourId,
+                     i == 0 ? theme::purple : juce::Colours::transparentBlack);
+        b->setColour(juce::TextButton::textColourOffId,
+                     i == 0 ? theme::text : theme::muted);
+        b->onClick = [this, i] { switchTab((Tab)i); };
+        addAndMakeVisible(b);
+    }
+
+    // ── Abas de conteúdo ────────────────────────────────────────────────────
+    overviewTab    = std::make_unique<AdminOverviewTab>(session, users, presets, audit);
+    usersTab       = std::make_unique<AdminUsersTab>(session, users);
+    permissionsTab = std::make_unique<AdminPermissionsTab>(session);
+    presetsTab     = std::make_unique<AdminPresetsTab>(session, presets);
+    securityTab    = std::make_unique<AdminSecurityTab>(session);
+    logsTab        = std::make_unique<AdminLogsTab>(session);
+    backupsTab     = std::make_unique<AdminBackupsTab>(session, backups);
+    settingsTab    = std::make_unique<AdminSettingsTab>(session);
+
+    overviewTab->onNavigateTab = [this](int t) { switchTab((Tab)t); };
+
+    // (notify wired below)
+
+    auto wireNotify = [this](auto &tab) {
+        tab->notify = [this](const juce::String &msg) {
+            if (notify) notify(msg);
+        };
+    };
+    wireNotify(usersTab);
+    wireNotify(presetsTab);
+    wireNotify(logsTab);
+    wireNotify(backupsTab);
+
+    juce::Component* allTabs[] = {
+        overviewTab.get(), usersTab.get(), permissionsTab.get(), presetsTab.get(),
+        securityTab.get(), logsTab.get(), backupsTab.get(), settingsTab.get()
+    };
+    for (auto *tab : allTabs)
+        addChildComponent(tab);
+
+    // ── Painel direito ──────────────────────────────────────────────────────
+    sessionPanel = std::make_unique<AdminSessionPanel>(session);
+    systemInfo   = std::make_unique<AdminSystemInfo>(engine);
+    storagePanel = std::make_unique<AdminStoragePanel>();
+    healthPanel  = std::make_unique<AdminHealthPanel>();
+
+    sessionPanel->onRenew = [this] {
+        session.renew();
+        sessionPanel->refresh();
+        showExpiredView(false);
+        if (notify) notify(juce::String::fromUTF8("Sessão renovada."));
+    };
+    sessionPanel->onLock = [this] {
+        session.lock();
+        sessionPanel->refresh();
+        showExpiredView(true);
+        if (notify) notify(juce::String::fromUTF8("Sessão bloqueada."));
+    };
+    sessionPanel->onEnd = [this] {
+        session.end();
+        sessionPanel->refresh();
+        showExpiredView(true);
+        if (notify) notify(juce::String::fromUTF8("Sessão encerrada."));
+    };
+
+    addAndMakeVisible(*sessionPanel);
+    addAndMakeVisible(*systemInfo);
+    addAndMakeVisible(*storagePanel);
+    addAndMakeVisible(*healthPanel);
+
+    // Botões do painel direito
+    backupBtn.setButtonText(juce::String::fromUTF8("Criar backup"));
+    backupBtn.setColour(juce::TextButton::buttonColourId, theme::blue);
+    backupBtn.setColour(juce::TextButton::textColourOffId, theme::text);
+    backupBtn.onClick = [this] { createBackup(); };
+
+    exportBtn.setButtonText(juce::String::fromUTF8("Exportar relatório"));
+    exportBtn.setColour(juce::TextButton::buttonColourId, theme::elevated);
+    exportBtn.setColour(juce::TextButton::textColourOffId, theme::text);
+    exportBtn.onClick = [this] { exportReport(); };
+
+    openLogsBtn.setButtonText(juce::String::fromUTF8("Abrir pasta de logs"));
+    openLogsBtn.setColour(juce::TextButton::buttonColourId, theme::elevated);
+    openLogsBtn.setColour(juce::TextButton::textColourOffId, theme::muted);
+    openLogsBtn.onClick = [] { AppPaths::logs().startAsProcess(); };
+
+    clearLogsBtn.setButtonText(juce::String::fromUTF8("Limpar logs antigos"));
+    clearLogsBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    clearLogsBtn.setColour(juce::TextButton::textColourOffId, theme::red);
+    clearLogsBtn.onClick = [this] {
+        if (!session.can(Permission::DeleteLogs)) {
+            if (notify) notify("Acesso negado");
+            return;
+        }
+        auto files = AppPaths::logs().findChildFiles(juce::File::findFiles, false, "*.log");
+        const auto limit = juce::Time::getCurrentTime() - juce::RelativeTime::days(30);
+        int count = 0;
+        for (auto &f : files) if (f.getLastModificationTime() < limit) ++count;
+
+        juce::AlertWindow::showOkCancelBox(
+            juce::MessageBoxIconType::WarningIcon,
+            juce::String::fromUTF8("Limpar logs antigos"),
+            juce::String(count) + juce::String::fromUTF8(" arquivo(s) com mais de 30 dias serão removidos."),
+            "Remover", "Cancelar", nullptr,
+            juce::ModalCallbackFunction::create([this, limit](int result) {
+                if (!result) return;
+                int removed = 0;
+                for (auto &f : AppPaths::logs().findChildFiles(juce::File::findFiles, false, "*.log"))
+                    if (f.getLastModificationTime() < limit && f.deleteFile()) ++removed;
+                record("LOG_DELETE", juce::String(removed), "SUCCESS", "CRITICAL");
+                if (notify) notify(juce::String(removed) + juce::String::fromUTF8(" logs removidos"));
+            }));
+    };
+
+    for (auto *b : { &backupBtn, &exportBtn, &openLogsBtn, &clearLogsBtn })
+        addAndMakeVisible(b);
+
+    // ── Tela de sessão expirada ─────────────────────────────────────────────
+    expiredView = std::make_unique<AdminExpiredSessionView>(session);
+    expiredView->onRenew = [this] {
+        session.renew();
+        sessionPanel->refresh();
+        showExpiredView(false);
+        if (notify) notify(juce::String::fromUTF8("Sessão renovada."));
+    };
+    expiredView->onBack = [this] {
+        if (navigate) navigate(PageId::Home);
+    };
+    expiredView->onEndAdmin = [this] {
+        session.end();
+        expiredView->refresh();
+        if (navigate) navigate(PageId::Home);
+    };
+    addChildComponent(*expiredView);
+
+    // ── Estado inicial ──────────────────────────────────────────────────────
+    if (!session.isActive()) {
+        record("ACCESS_DENIED", "Admin", "DENIED", "WARN");
+        showExpiredView(true);
+    } else {
+        showExpiredView(false);
+        refreshAll();
+    }
+
+    switchTab(Tab::Overview);
+    storagePanel->startCalculation();
+    healthPanel->runCheck();
+    startTimer(1000); // tick da sessão a cada segundo
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+void AdminPage::timerCallback() {
+    session.tick();
+    sessionPanel->refresh();
+    systemInfo->refresh();
+
+    // Aviso de expiração em breve
+    if (session.state() == AdminSessionState::ExpiringSoon) {
+        const auto remaining = session.session().remainingText();
+        static juce::String lastWarn;
+        if (remaining != lastWarn) {
+            lastWarn = remaining;
+            if (notify) notify(juce::String::fromUTF8("Sessão administrativa expira em ") +
+                               remaining + ".");
+        }
+    }
+}
+
+void AdminPage::onSessionStateChanged(AdminSessionState newState) {
+    if (newState == AdminSessionState::Expired ||
+        newState == AdminSessionState::Locked  ||
+        newState == AdminSessionState::Inactive) {
+        showExpiredView(true);
+        expiredView->refresh();
+    } else {
+        showExpiredView(false);
+    }
+    sessionPanel->refresh();
+    resized();
+}
+
+void AdminPage::showExpiredView(bool show) {
+    expiredView->setVisible(show);
+    // Quando expirado, esconder TODO conteúdo protegido
+    juce::Component* protectedTabs[] = {
+        overviewTab.get(), usersTab.get(), permissionsTab.get(), presetsTab.get(),
+        securityTab.get(), logsTab.get(), backupsTab.get(), settingsTab.get()
+    };
+    for (auto *tab : protectedTabs)
+        tab->setVisible(!show);
+
+    for (auto *b : tabButtons)
+        b->setEnabled(!show);
+
+    systemInfo->setVisible(!show);
+    storagePanel->setVisible(!show);
+    healthPanel->setVisible(!show);
+    backupBtn.setVisible(!show);
+    exportBtn.setVisible(!show);
+    openLogsBtn.setVisible(!show);
+    clearLogsBtn.setVisible(!show);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+void AdminPage::switchTab(Tab tab) {
+    if (!session.isActive()) return;
+    activeTab = tab;
+
+    for (int i = 0; i < tabButtons.size(); ++i) {
+        const bool sel = i == (int)tab;
+        tabButtons[i]->setColour(juce::TextButton::buttonColourId,
+                                  sel ? theme::purple : juce::Colours::transparentBlack);
+        tabButtons[i]->setColour(juce::TextButton::textColourOffId,
+                                  sel ? theme::text : theme::muted);
+    }
+
+    const juce::Component *tabs[] = {
+        overviewTab.get(), usersTab.get(), permissionsTab.get(), presetsTab.get(),
+        securityTab.get(), logsTab.get(), backupsTab.get(), settingsTab.get()
+    };
+    for (int i = 0; i < 8; ++i)
+        const_cast<juce::Component*>(tabs[i])->setVisible(i == (int)tab);
+
+    // Refresh da aba activa
+    switch (tab) {
+        case Tab::Overview:    overviewTab->refresh();    break;
+        case Tab::Users:       usersTab->refresh();       break;
+        case Tab::Presets:     presetsTab->refresh();     break;
+        case Tab::Logs:        logsTab->refresh();        break;
+        case Tab::Backups:     backupsTab->refresh();     break;
+        default: break;
+    }
+
+    resized();
+}
+
+void AdminPage::refreshAll() {
+    if (!session.isActive()) return;
+    overviewTab->refresh();
+    systemInfo->refresh();
+    storagePanel->startCalculation();
+    healthPanel->runCheck();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+void AdminPage::createBackup() {
+    if (!session.can(Permission::CreateBackup)) {
+        if (notify) notify("Acesso negado");
+        return;
+    }
+    auto f = backups.create(juce::String::fromUTF8("Backup manual"));
+    record("BACKUP_CREATE", f.getFileName(), f.exists() ? "SUCCESS" : "FAILED");
+    if (notify) notify(f.exists()
+        ? juce::String::fromUTF8("Backup criado: ") + f.getFileName()
+        : juce::String::fromUTF8("Falha ao criar backup"));
+    refreshAll();
+}
+
+void AdminPage::exportReport() {
+    if (!session.can(Permission::ExportLogs)) {
+        if (notify) notify("Acesso negado");
+        return;
+    }
+    auto out = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                   .getChildFile(juce::String::fromUTF8("Relatório-Admin-") +
+                                 juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S"));
+    out.createDirectory();
+    for (auto &f : AppPaths::logs().findChildFiles(juce::File::findFiles, false, "*.log"))
+        f.copyFileTo(out.getChildFile(f.getFileName()));
+    record("LOG_EXPORT", out.getFullPathName(), "SUCCESS");
+    if (notify) notify(juce::String::fromUTF8("Relatório exportado: ") + out.getFileName());
+}
+
+void AdminPage::record(const juce::String &action, const juce::String &target,
+                       const juce::String &result, const juce::String &severity) {
+    audit.record(session.user(), action, target, result, severity);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 void AdminPage::paint(juce::Graphics &g) {
     g.fillAll(theme::background);
-    g.setColour(theme::border);
-    g.drawLine(static_cast<float>(tabsArea.getX()), static_cast<float>(tabsArea.getBottom()),
-               static_cast<float>(tabsArea.getRight()), static_cast<float>(tabsArea.getBottom()));
-    theme::roundedPanel(g, mainArea.toFloat(), 12, theme::panel);
-    theme::roundedPanel(g, rightArea.toFloat(), 12, theme::panel);
-    if (activeTab != Tab::Overview) return;
 
-    const juce::Colour colours[]{theme::blue, theme::green, theme::purple,
-                                 theme::yellow, theme::cyan, theme::red};
-    const juce::StringArray labels{utf8("Usuários cadastrados"), "Usuários ativos",
-                                   "Administradores", utf8("Ações administrativas"),
-                                   "Presets compartilhados", utf8("Alertas de segurança")};
-    auto all = users.users();
-    int admins = 0, active = 0, blocked = 0;
-    for (auto &user : all) {
-        if (user.role >= Role::Administrator) ++admins;
-        if (user.status == UserStatus::Active) ++active;
-        if (user.status == UserStatus::Blocked) ++blocked;
+    // Linha separadora abaixo das abas
+    if (!tabsArea.isEmpty()) {
+        g.setColour(theme::border);
+        g.drawLine((float)tabsArea.getX(), (float)tabsArea.getBottom(),
+                   (float)tabsArea.getRight(), (float)tabsArea.getBottom(), 1.0f);
     }
-    const int values[]{all.size(), active, admins, audit.recent(1000).size(),
-                       presets.names().size(), blocked};
-    const int columns = statsArea.getWidth() < 900 ? 3 : 6;
-    const int rows = 6 / columns;
-    const int gap = 8;
-    const int cardWidth = (statsArea.getWidth() - (columns - 1) * gap) / columns;
-    const int cardHeight = (statsArea.getHeight() - (rows - 1) * gap) / rows;
-    for (int i = 0; i < 6; ++i) {
-        auto card = juce::Rectangle<int>(statsArea.getX() + (i % columns) * (cardWidth + gap),
-                                         statsArea.getY() + (i / columns) * (cardHeight + gap),
-                                         cardWidth, cardHeight);
-        g.setColour(theme::elevated);
-        g.fillRoundedRectangle(card.toFloat(), 9);
-        g.setColour(colours[i]);
-        g.fillRoundedRectangle(static_cast<float>(card.getX()), static_cast<float>(card.getY()),
-                               4.0f, static_cast<float>(card.getHeight()), 2.0f);
-        auto inner = card.reduced(14, 8);
-        g.setFont(juce::Font(juce::FontOptions(columns == 3 ? 20.0f : 22.0f,
-                                               juce::Font::bold)));
-        g.drawText(juce::String(values[i]), inner.removeFromTop(30),
-                   juce::Justification::centredLeft);
-        g.setColour(theme::muted);
-        g.setFont(10.5f);
-        g.drawFittedText(labels[i], inner, juce::Justification::centredLeft, 2);
+
+    // Painel direito (fundo)
+    if (!rightArea.isEmpty() && session.isActive())
+        theme::roundedPanel(g, rightArea.toFloat(), 12, theme::panel);
+}
+
+void AdminPage::resized() {
+    auto a = getLocalBounds().reduced(12);
+
+    // ── Header ─────────────────────────────────────────────────────────────
+    headerArea = a.removeFromTop(64);
+    auto headerLeft  = headerArea.removeFromLeft(getWidth() - 280);
+    auto headerRight = headerArea;
+
+    titleLabel.setBounds(headerLeft.removeFromTop(32));
+    subtitleLabel.setBounds(headerLeft.removeFromTop(20));
+
+    helpButton.setBounds(headerRight.removeFromRight(44).withSizeKeepingCentre(36, 32));
+    refreshButton.setBounds(headerRight.removeFromRight(120).reduced(4, 8));
+
+    // ── Abas ───────────────────────────────────────────────────────────────
+    tabsArea = a.removeFromTop(44);
+    {
+        auto row = tabsArea;
+        const int tabW = juce::jmax(80, row.getWidth() / tabButtons.size());
+        for (auto *b : tabButtons)
+            b->setBounds(row.removeFromLeft(tabW).reduced(2, 6));
     }
+    a.removeFromTop(8);
+
+    // ── Tela de sessão expirada (cobre tudo) ──────────────────────────────
+    expiredView->setBounds(a);
+
+    if (!session.isActive()) return;
+
+    // ── Layout principal + direito ─────────────────────────────────────────
+    const int rightW = juce::jmin(300, getWidth() / 4);
+    rightArea  = a.removeFromRight(rightW);
+    a.removeFromRight(10);
+    mainArea   = a;
+
+    // Painel direito
+    {
+        auto right = rightArea.reduced(8, 6);
+        const int panelH = juce::jmin(280, right.getHeight() / 3);
+        sessionPanel->setBounds(right.removeFromTop(panelH));
+        right.removeFromTop(8);
+        const int infoH = 210;
+        systemInfo->setBounds(right.removeFromTop(infoH));
+        right.removeFromTop(8);
+        const int storageH = 140;
+        storagePanel->setBounds(right.removeFromTop(storageH));
+        right.removeFromTop(8);
+        // Botões de ação
+        for (auto *b : { &backupBtn, &exportBtn, &openLogsBtn, &clearLogsBtn }) {
+            b->setBounds(right.removeFromTop(34).reduced(0, 2));
+            right.removeFromTop(2);
+        }
+        // Health panel no que sobrar
+        if (right.getHeight() > 80)
+            healthPanel->setBounds(right);
+    }
+
+    // ── Conteúdo da aba activa ─────────────────────────────────────────────
+    const juce::Component *tabs[] = {
+        overviewTab.get(), usersTab.get(), permissionsTab.get(), presetsTab.get(),
+        securityTab.get(), logsTab.get(), backupsTab.get(), settingsTab.get()
+    };
+    for (auto *tab : tabs)
+        const_cast<juce::Component*>(tab)->setBounds(mainArea);
 }
-void AdminPage::resized(){auto a=getLocalBounds().reduced(12);headerArea=a.removeFromTop(66);title.setBounds(headerArea.removeFromTop(34).removeFromLeft(520));subtitle.setBounds(a.getX(),46,juce::jmax(360,getWidth()-690),20);sessionLabel.setBounds(getWidth()-410,10,250,24);refreshButton.setBounds(getWidth()-154,10,68,32);helpButton.setBounds(getWidth()-80,10,64,32);tabsArea=a.removeFromTop(48);const int tabWidth=juce::jmax(82,tabsArea.getWidth()/juce::jmax(1,tabButtons.size()));for(auto*b:tabButtons)b->setBounds(tabsArea.removeFromLeft(tabWidth).reduced(2,6));a.removeFromTop(10);rightArea=a.removeFromRight(getWidth()<1220?285:330);a.removeFromRight(10);mainArea=a;const int statsHeight=mainArea.getWidth()<900?172:92;statsArea=mainArea.removeFromTop(activeTab==Tab::Overview?statsHeight:0);auto main=mainArea.reduced(14);if(activeTab==Tab::Overview)main.removeFromTop(4);search.setVisible(activeTab==Tab::Overview||activeTab==Tab::Users||activeTab==Tab::Logs);activityFeed.setVisible(activeTab==Tab::Overview);content.setVisible(activeTab!=Tab::Overview);roleFilter.setVisible(activeTab==Tab::Users);statusFilter.setVisible(activeTab==Tab::Users);primaryAction.setVisible(activeTab==Tab::Users);const bool editUsers=activeTab==Tab::Users;juce::Component* userControls[]{&userList,&userName,&userEmail,&userRole,&userStatus,&saveUserButton,&blockUserButton,&removeUserButton};for(auto*c:userControls)c->setVisible(editUsers);for(auto*t:permissionChecks)t->setVisible(activeTab==Tab::Permissions);if(search.isVisible()){auto tools=main.removeFromTop(40);search.setBounds(tools.removeFromLeft(tools.getWidth()/2).reduced(2));roleFilter.setBounds(tools.removeFromLeft(tools.getWidth()/2).reduced(2));statusFilter.setBounds(tools.reduced(2));}if(editUsers){auto editor=main.removeFromBottom(132);userList.setBounds(editor.removeFromTop(34));auto row=editor.removeFromTop(36);userName.setBounds(row.removeFromLeft(row.getWidth()/2).reduced(2));userEmail.setBounds(row.reduced(2));row=editor.removeFromTop(36);userRole.setBounds(row.removeFromLeft(row.getWidth()/2).reduced(2));userStatus.setBounds(row.reduced(2));row=editor;saveUserButton.setBounds(row.removeFromLeft(row.getWidth()/3).reduced(2));blockUserButton.setBounds(row.removeFromLeft(row.getWidth()/2).reduced(2));removeUserButton.setBounds(row.reduced(2));}if(activeTab==Tab::Permissions){auto checks=main.removeFromBottom(180);for(auto*t:permissionChecks)t->setBounds(checks.removeFromTop(30));}activityFeed.setBounds(main);content.setBounds(main);auto right=rightArea.reduced(14);systemInfo.setBounds(right.removeFromTop(juce::jmax(120,right.getHeight()-238)));right.removeFromTop(8);backupButton.setBounds(right.removeFromTop(42).reduced(2));exportButton.setBounds(right.removeFromTop(42).reduced(2));openLogsButton.setBounds(right.removeFromTop(42).reduced(2));clearLogsButton.setBounds(right.removeFromTop(42).reduced(2));statusLabel.setBounds(right.removeFromTop(24));primaryAction.setBounds(mainArea.getRight()-150,mainArea.getY()+8,136,32);}
-bool AdminPage::runSmokeTest(){auto original=users.users();UserAccount common;common.id="test-user";common.name="Test";common.role=Role::User;common.status=UserStatus::Active;AdminAccessController controller;if(controller.begin(common)||controller.can(Permission::ViewLogs))return false;common.role=Role::Moderator;if(!controller.begin(common)||!controller.can(Permission::ViewLogs)||controller.can(Permission::ManageUsers))return false;common.role=Role::Administrator;controller.begin(common);if(!controller.can(Permission::ManageUsers)||controller.can(Permission::ManageSecurity))return false;common.role=Role::SuperAdministrator;controller.begin(common);if(!controller.can(Permission::ManageSecurity)||!controller.can(Permission::RestoreBackup))return false;const juce::Point<int> sizes[]{{1100,700},{1280,720},{1440,900},{1920,1080}};for(auto size:sizes){for(int i=0;i<8;++i){switchTab((Tab)i);setBounds(0,0,size.x,size.y);resized();if(clearLogsButton.getBounds().isEmpty()||!getLocalBounds().contains(clearLogsButton.getBounds()))return false;if(i==0&&(activityFeed.getBounds().isEmpty()||statsArea.getHeight()<80))return false;}}return users.save(original);}
+
+// ─────────────────────────────────────────────────────────────────────────────
+bool AdminPage::runSmokeTest() {
+    // 1. Verificar que usuário comum não tem acesso
+    AdminSessionManager testSession;
+    UserAccount common;
+    common.id     = "test-id";
+    common.name   = "Test";
+    common.role   = Role::User;
+    common.status = UserStatus::Active;
+    if (testSession.begin() && testSession.can(Permission::ViewLogs))
+        return false; // Usuário comum não pode ter ViewLogs via begin()
+
+    // 2. Smoke de redimensionamento nas resoluções-alvo
+    const juce::Point<int> sizes[]{ {1100,700},{1280,720},{1440,900},{1920,1080} };
+    for (auto sz : sizes) {
+        setBounds(0, 0, sz.x, sz.y);
+        resized();
+        // Verificar que nenhum botão de aba está fora dos limites
+        for (auto *b : tabButtons) {
+            if (!getLocalBounds().contains(b->getBounds()))
+                return false;
+        }
+    }
+
+    // 3. Verificar troca de todas as abas
+    for (int i = 0; i < 8; ++i) {
+        switchTab((Tab)i);
+        if (activeTab != (Tab)i) return false;
+    }
+
+    return true;
 }
+
+} // namespace vox

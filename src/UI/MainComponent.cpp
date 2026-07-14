@@ -528,8 +528,20 @@ void MainComponent::paint(juce::Graphics &g) {
     g.drawLine(mic.getCentreX() - 17, mic.getBottom() - 8,
                mic.getCentreX() + 17, mic.getBottom() - 8, 4);
     auto pills = r.withTrimmedLeft(32).withTrimmedTop(101).withWidth(300);
-    const juce::StringArray values{juce::String::fromUTF8("Latência: 8 ms"),
-                                   "CPU: 6%", "48.000 Hz", "Buffer: 256"};
+    auto *dev = engine.deviceManager().getCurrentAudioDevice();
+    const double sr = dev ? dev->getCurrentSampleRate() : 0.0;
+    const int buf  = dev ? dev->getCurrentBufferSizeSamples() : 0;
+    const double latMs = (dev && sr > 0)
+        ? 1000.0 * (dev->getInputLatencyInSamples() + dev->getOutputLatencyInSamples() + buf) / sr
+        : 0.0;
+    const juce::StringArray values{
+        juce::String::fromUTF8("Lat\xc3\xaancia: ") +
+            (dev ? juce::String(latMs, 1) + " ms" : "--"),
+        juce::String::fromUTF8("CPU: ") +
+            juce::String((int)(engine.cpuUsage() * 100)) + "%",
+        sr > 0 ? juce::String((int)sr / 1000) + " kHz" : "-- Hz",
+        buf > 0 ? "Buffer: " + juce::String(buf) : "Buffer: --"
+    };
     for (auto value : values) {
       auto p = pills.removeFromLeft(70).reduced(2);
       g.setColour(theme::elevated.withAlpha(.9f));
@@ -758,7 +770,9 @@ void MainComponent::timerCallback() {
                d->getCurrentBufferSizeSamples()) /
               d->getCurrentSampleRate();
   cpuLatency.setText(
-      "Latencia\n" + (d ? juce::String(latency, 1) + " ms" : "--") + "\nCPU " +
+      juce::String::fromUTF8("Lat\xc3\xaancia\n") +
+          (d ? juce::String(latency, 1) + " ms" : "--") +
+          juce::String::fromUTF8("\nCPU ") +
           juce::String(engine.cpuUsage() * 100, 1) + "%",
       juce::dontSendNotification);
   if (currentPage == 9)

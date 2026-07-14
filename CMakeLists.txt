@@ -32,6 +32,7 @@ target_sources(ModificadorDeVoz PRIVATE
   src/Admin/AdminAccessController.h src/Admin/AdminAccessController.cpp
   src/Admin/AuditLogManager.h src/Admin/AuditLogManager.cpp
   src/Admin/BackupManager.h src/Admin/BackupManager.cpp
+  src/Admin/AdminSessionManager.h src/Admin/AdminSessionManager.cpp
   src/Audio/AudioEngine.h src/Audio/AudioEngine.cpp
   src/Audio/AudioRoutingManager.h src/Audio/AudioRoutingManager.cpp
   src/DSP/VoiceProcessor.h src/DSP/VoiceProcessor.cpp
@@ -48,6 +49,13 @@ target_sources(ModificadorDeVoz PRIVATE
   src/UI/Pages/VoicesPage.h src/UI/Pages/VoicesPage.cpp
   src/UI/Pages/AdminPage.h src/UI/Pages/AdminPage.cpp
   src/UI/Admin/AdminActivityFeed.h src/UI/Admin/AdminActivityFeed.cpp
+  src/UI/Admin/AdminExpiredSessionView.h src/UI/Admin/AdminExpiredSessionView.cpp
+  src/UI/Admin/AdminSessionPanel.h src/UI/Admin/AdminSessionPanel.cpp
+  src/UI/Admin/AdminStatsCard.h src/UI/Admin/AdminStatsCard.cpp
+  src/UI/Admin/AdminSystemInfo.h src/UI/Admin/AdminSystemInfo.cpp
+  src/UI/Admin/AdminOverviewTab.h src/UI/Admin/AdminOverviewTab.cpp
+  src/UI/Admin/AdminUsersTab.h src/UI/Admin/AdminUsersTab.cpp
+  src/UI/Admin/AdminTabs.h src/UI/Admin/AdminTabs.cpp
   src/UI/Pages/IntegrationsPage.h src/UI/Pages/IntegrationsPage.cpp
   src/Integrations/IntegrationProfile.h src/Integrations/IntegrationProfile.cpp
   src/Integrations/IntegrationProfileManager.h src/Integrations/IntegrationProfileManager.cpp

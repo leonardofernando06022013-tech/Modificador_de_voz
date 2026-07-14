@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "Admin/AdminAccessController.h"
+#include "Admin/AdminSessionManager.h"
 #include "Admin/AuditLogManager.h"
 #include "Admin/BackupManager.h"
 #include "Admin/UserManager.h"
@@ -10,57 +10,92 @@
 #include "Presets/PresetManager.h"
 #include "Settings/SettingsManager.h"
 #include "UI/Navigation/PageRouter.h"
+
 #include "UI/Admin/AdminActivityFeed.h"
+#include "UI/Admin/AdminExpiredSessionView.h"
+#include "UI/Admin/AdminOverviewTab.h"
+#include "UI/Admin/AdminSessionPanel.h"
+#include "UI/Admin/AdminStatsCard.h"
+#include "UI/Admin/AdminSystemInfo.h"
+#include "UI/Admin/AdminTabs.h"
+#include "UI/Admin/AdminUsersTab.h"
 
 namespace vox {
+
 class AdminPage final : public juce::Component, private juce::Timer {
 public:
     AdminPage(AudioEngine &, SettingsManager &, PresetManager &);
+    ~AdminPage() override = default;
+
     void paint(juce::Graphics &) override;
     void resized() override;
-    bool hasAccess() const { return access.active(); }
-    bool runSmokeTest();
 
-    std::function<void(PageId)> navigate;
+    // Estado de acesso (para ocultar item de menu quando sem acesso)
+    bool hasAccess() const { return session.isActive(); }
+
+    // Callbacks para o exterior
+    std::function<void(PageId)>           navigate;
     std::function<void(const juce::String &)> notify;
 
+    // Smoke test de regressão
+    bool runSmokeTest();
+
 private:
-    enum class Tab { Overview, Users, Permissions, Presets, Security, Logs, Backups, Settings };
+    enum class Tab {
+        Overview = 0, Users, Permissions, Presets,
+        Security, Logs, Backups, Settings
+    };
 
     void timerCallback() override;
-    void switchTab(Tab);
-    void refresh();
-    void refreshUsers();
-    void saveUser();
-    void blockUser();
-    void removeUser();
+    void switchTab(Tab t);
+    void refreshAll();
+    void onSessionStateChanged(AdminSessionState newState);
+    void showExpiredView(bool show);
     void createBackup();
-    void exportLogs();
-    void clearOldLogs();
+    void exportReport();
     void record(const juce::String &action, const juce::String &target,
                 const juce::String &result, const juce::String &severity = "INFO");
 
-    AudioEngine &engine;
+    // ── Core ──────────────────────────────────────────────────────────────
+    AudioEngine    &engine;
     SettingsManager &settings;
-    PresetManager &presets;
-    UserManager users;
-    PermissionManager permissions;
-    AdminAccessController access;
+    PresetManager  &presets;
+    UserManager     users;
+    BackupManager   backups;
     AuditLogManager audit;
-    BackupManager backups;
+    AdminSessionManager session;
+
     Tab activeTab = Tab::Overview;
 
-    juce::Label title, subtitle, sessionLabel, statusLabel;
+    // ── Header ────────────────────────────────────────────────────────────
+    juce::Label titleLabel, subtitleLabel;
+    juce::TextButton refreshButton, helpButton;
+
+    // ── Abas ──────────────────────────────────────────────────────────────
     juce::OwnedArray<juce::TextButton> tabButtons;
-    juce::TextEditor content, systemInfo, search, userName, userEmail;
-    AdminActivityFeed activityFeed;
-    juce::ComboBox roleFilter, statusFilter, userList, userRole, userStatus;
-    juce::OwnedArray<juce::ToggleButton> permissionChecks;
-    juce::TextButton refreshButton{"Atualizar"}, helpButton{"Ajuda"},
-        primaryAction{juce::String::fromUTF8("Adicionar usuário")}, saveUserButton{"Salvar"},
-        blockUserButton{"Bloquear"}, removeUserButton{"Remover"},
-        backupButton{"Criar backup"}, exportButton{juce::String::fromUTF8("Exportar relatório")},
-        openLogsButton{"Abrir logs"}, clearLogsButton{"Limpar logs antigos"};
-    juce::Rectangle<int> headerArea, tabsArea, mainArea, rightArea, statsArea;
+
+    // ── Conteúdo principal ────────────────────────────────────────────────
+    std::unique_ptr<AdminOverviewTab>    overviewTab;
+    std::unique_ptr<AdminUsersTab>       usersTab;
+    std::unique_ptr<AdminPermissionsTab> permissionsTab;
+    std::unique_ptr<AdminPresetsTab>     presetsTab;
+    std::unique_ptr<AdminSecurityTab>    securityTab;
+    std::unique_ptr<AdminLogsTab>        logsTab;
+    std::unique_ptr<AdminBackupsTab>     backupsTab;
+    std::unique_ptr<AdminSettingsTab>    settingsTab;
+
+    // ── Painel direito ────────────────────────────────────────────────────
+    std::unique_ptr<AdminSessionPanel>   sessionPanel;
+    std::unique_ptr<AdminSystemInfo>     systemInfo;
+    std::unique_ptr<AdminStoragePanel>   storagePanel;
+    std::unique_ptr<AdminHealthPanel>    healthPanel;
+    juce::TextButton backupBtn, exportBtn, openLogsBtn, clearLogsBtn;
+
+    // ── Tela de sessão expirada ───────────────────────────────────────────
+    std::unique_ptr<AdminExpiredSessionView> expiredView;
+
+    // ── Layout ────────────────────────────────────────────────────────────
+    juce::Rectangle<int> headerArea, tabsArea, mainArea, rightArea;
 };
+
 } // namespace vox
