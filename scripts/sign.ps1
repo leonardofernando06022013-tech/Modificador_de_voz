@@ -1,2 +1,2 @@
 param([Parameter(Mandatory=$true)][string]$CertificateThumbprint,[string]$TimestampUrl='http://timestamp.digicert.com')
-$ErrorActionPreference='Stop';$signtool=(Get-Command signtool.exe -ErrorAction Stop).Source;$root=Split-Path -Parent $PSScriptRoot;& $signtool sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 "$root\build\ModificadorDeVoz_artefacts\Release\ModificadorDeVoz.exe";exit $LASTEXITCODE
+$ErrorActionPreference='Stop';$signtool=(Get-Command signtool.exe -ErrorAction Stop).Source;$root=Split-Path -Parent $PSScriptRoot;& $signtool sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 "$root\build\BlackVoice_artefacts\Release\BlackVoice.exe";exit $LASTEXITCODE

@@ -1,6 +1,6 @@
-# Modificador de Voz
+# BlackVoice
 
-Modificador de voz local para Windows 10/11 x64, escrito em C++20 com JUCE 8.0.13, CMake e WASAPI. Captura um microfone, aplica DSP em tempo real e reproduz o resultado em uma saída física ou virtual já instalada. Não instala driver, não grava áudio, não usa internet em execução e não coleta telemetria.
+BlackVoice é um modificador de voz local para Windows 10/11 x64, escrito em C++20 com JUCE 8.0.13, CMake e WASAPI. Captura um microfone, aplica DSP em tempo real e reproduz o resultado em uma saída física ou virtual já instalada. Não instala driver, não grava áudio, não usa internet em execução e não coleta telemetria.
 
 > Use de forma responsável, com consentimento. O programa não é uma ferramenta de autenticação nem de clonagem de identidade.
 
@@ -53,7 +53,7 @@ cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Executável: `build\ModificadorDeVoz_artefacts\Release\ModificadorDeVoz.exe`.
+Executável: `build\BlackVoice_artefacts\Release\BlackVoice.exe`.
 
 Limpar: `powershell -ExecutionPolicy Bypass -File .\scripts\clean.ps1`.
 
@@ -61,22 +61,22 @@ Portátil: compile Release e execute `powershell -ExecutionPolicy Bypass -File .
 
 ## Instalador
 
-Instale Inno Setup 6, compile Release e abra `installer\ModificadorDeVoz.iss`, ou rode:
+Instale Inno Setup 6, compile Release e abra `installer\BlackVoice.iss`, ou rode:
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\installer\ModificadorDeVoz.iss
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\installer\BlackVoice.iss
 ```
 
 O instalador em `dist` inclui executável, README, licença, atalhos e desinstalador.
 
 ## Configuração de cabo virtual
 
-Instale um dispositivo como VB-CABLE conforme as instruções do fabricante e reinicie se solicitado. O Modificador de Voz não inclui nem instala esse driver.
+Instale um dispositivo como VB-CABLE conforme as instruções do fabricante e reinicie se solicitado. O BlackVoice não inclui nem instala esse driver.
 
 Para Discord ou FiveM:
 
-1. Selecione o microfone real como entrada no Modificador de Voz.
-2. Selecione **CABLE Input** (ou entrada de outro cabo virtual) como saída no Modificador de Voz.
+1. Selecione o microfone real como entrada no BlackVoice.
+2. Selecione **CABLE Input** (ou entrada de outro cabo virtual) como saída no BlackVoice.
 3. No Discord/FiveM, selecione **CABLE Output** como microfone.
 4. Use fones de ouvido para evitar feedback.
 
@@ -89,13 +89,13 @@ No OBS, adicione **Captura de entrada de áudio** e escolha `CABLE Output`. Evit
 - Comece em 48 kHz/256 amostras. Tente 128 se o sistema ficar estável; aumente para 512/1024 se houver cortes.
 - Sample rate é a quantidade de amostras por segundo. Todos os dispositivos na rota devem preferencialmente usar a mesma taxa.
 - Buffer menor reduz latência e aumenta a exigência de CPU. Buffer maior é mais estável, mas atrasa a fala.
-- Use fones, não caixas de som. Não escolha como saída do Modificador de Voz o mesmo dispositivo que retorna à entrada.
+- Use fones, não caixas de som. Não escolha como saída do BlackVoice o mesmo dispositivo que retorna à entrada.
 - Desative “Ouvir este dispositivo” no Windows se houver voz duplicada.
 - O “monitoramento” ocorre ao escolher uma saída audível; para uso com cabo virtual, monitore pelo VoiceMeeter/OBS sem fechar um loop.
 
 ## Arquivos e privacidade
 
-Configurações: `%APPDATA%\Modificador de Voz\settings.json`. Presets: `%APPDATA%\Modificador de Voz\Presets`. Logs: `%LOCALAPPDATA%\Modificador de Voz\Logs`. Em modo portátil, são usadas as pastas `Data` e `Presets` ao lado do executável. JSON inválido é movido para backup e valores seguros permanecem ativos. Nenhum áudio é salvo automaticamente.
+Configurações: `%APPDATA%\BlackVoice\settings.json`. Presets: `%APPDATA%\BlackVoice\Presets`. Logs: `%LOCALAPPDATA%\BlackVoice\Logs`. Em modo portátil, são usadas as pastas `Data` e `Presets` ao lado do executável. JSON inválido é movido para backup e valores seguros permanecem ativos. Nenhum áudio é salvo automaticamente.
 
 ## Testes
 
@@ -104,7 +104,7 @@ Configurações: `%APPDATA%\Modificador de Voz\settings.json`. Presets: `%APPDAT
 O teste do roteador valida página atual, página anterior e supressão de transições duplicadas. Para percorrer todas as páginas do aplicativo automaticamente:
 
 ```powershell
-.\build\ModificadorDeVoz_artefacts\Release\ModificadorDeVoz.exe --ui-smoke-test
+.\build\BlackVoice_artefacts\Release\BlackVoice.exe --ui-smoke-test
 ```
 
 Checklist manual:
@@ -124,7 +124,7 @@ Checklist manual:
 - **Dispositivo ocupado:** feche DAWs/jogos em modo exclusivo ou desative “Permitir que aplicativos assumam controle exclusivo” nas propriedades avançadas do dispositivo.
 - **Taxa incompatível:** escolha uma taxa oferecida na tela e iguale o Formato padrão do Windows.
 - **Estalos:** aumente o buffer, feche efeitos/overlays pesados e confira o diagnóstico de CPU.
-- **Sem áudio no Discord:** confira que o Modificador de Voz sai em `CABLE Input` e Discord recebe de `CABLE Output`.
+- **Sem áudio no Discord:** confira que o BlackVoice sai em `CABLE Input` e Discord recebe de `CABLE Output`.
 - **Caminho/CMake:** use uma pasta comum sem permissões administrativas e confirme `cmake --version`, `git --version` e `where cl`.
 
 ## Limitações conhecidas
@@ -140,7 +140,7 @@ Esses itens são declarados para não confundir código presente com comportamen
 
 ## Licenças
 
-O código do Modificador de Voz usa MIT. JUCE 8.0.13 é uma dependência externa com licenciamento próprio (AGPLv3 ou licença comercial JUCE, conforme o uso). Antes de distribuir um binário fechado, obtenha uma licença JUCE compatível. Não há biblioteca de pitch adicional.
+O código do BlackVoice usa MIT. JUCE 8.0.13 é uma dependência externa com licenciamento próprio (AGPLv3 ou licença comercial JUCE, conforme o uso). Antes de distribuir um binário fechado, obtenha uma licença JUCE compatível. Não há biblioteca de pitch adicional.
 
 ## Pacote completo, assinatura e SmartScreen
 
@@ -150,7 +150,7 @@ Com Visual Studio 2022, CMake, Git e Inno Setup no PATH, execute:
 powershell -ExecutionPolicy Bypass -File .\scripts\package-all.ps1
 ```
 
-O comando compila Release x64, executa os testes, cria `dist\portable`, cria `dist\installer\Modificador-de-Voz-Setup-x64.exe` e grava `dist\checksums\SHA256.txt`. Ele interrompe imediatamente se uma ferramenta, teste ou artefato estiver ausente.
+O comando compila Release x64, executa os testes, cria `dist\portable`, cria `dist\installer\BlackVoice-Setup-x64.exe` e grava `dist\checksums\SHA256.txt`. Ele interrompe imediatamente se uma ferramenta, teste ou artefato estiver ausente.
 
 O projeto não contém certificado. Binários sem assinatura podem acionar o Windows SmartScreen. Para assinar futuramente, instale o Windows SDK e use `scripts\sign.ps1` com o thumbprint de um certificado de assinatura de código legítimo. Não tente contornar o SmartScreen.
 

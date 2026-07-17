@@ -6,7 +6,7 @@
 namespace vox {
 class Application final : public juce::JUCEApplication {
 public:
-    const juce::String getApplicationName() override { return "Modificador de Voz"; }
+    const juce::String getApplicationName() override { return "BlackVoice"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
     bool moreThanOneInstanceAllowed() override { return false; }
     void anotherInstanceStarted(const juce::String&) override { if (window) window->bringToFront(); }

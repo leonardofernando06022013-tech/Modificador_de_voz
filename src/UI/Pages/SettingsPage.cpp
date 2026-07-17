@@ -117,7 +117,7 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   startWindows.onClick = [this] {
     const auto key = "HKEY_CURRENT_"
                      "USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\"
-                     "ModificadorDeVoz";
+                     "BlackVoice";
     if (startWindows.getToggleState())
       juce::WindowsRegistry::setValue(
           key,
@@ -147,14 +147,14 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
     canvas.addAndMakeVisible(b);
   exportButton.onClick = [this] {
     auto f = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                 .getChildFile("ModificadorDeVoz-settings.json");
+                 .getChildFile("BlackVoice-settings.json");
     f.replaceWithText(juce::JSON::toString(
         SettingsManager::parametersToJson(engine.parameters()), true));
     saveStatus.setText("Exportado para Documentos", juce::dontSendNotification);
   };
   importButton.onClick = [this] {
     auto f = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                 .getChildFile("ModificadorDeVoz-settings.json");
+                 .getChildFile("BlackVoice-settings.json");
     auto backup = AppPaths::data().getChildFile("settings-before-import.json");
     backup.replaceWithText(juce::JSON::toString(
         SettingsManager::parametersToJson(engine.parameters()), true));

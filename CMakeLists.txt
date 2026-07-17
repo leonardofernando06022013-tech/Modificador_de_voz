@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(ModificadorDeVoz VERSION 1.0.0 LANGUAGES CXX)
+project(BlackVoice VERSION 1.0.0 LANGUAGES CXX)
 
 add_custom_target(validate_locales ALL
   COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/validate-locales.ps1"
@@ -19,12 +19,12 @@ else()
   find_package(JUCE CONFIG REQUIRED)
 endif()
 
-juce_add_gui_app(ModificadorDeVoz PRODUCT_NAME "Modificador de Voz" COMPANY_NAME "Modificador de Voz" VERSION ${PROJECT_VERSION}
-  BUNDLE_ID "com.modificadordevoz.app"
-  ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/ModificadorDeVoz.png"
-  ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/ModificadorDeVoz.png")
-set_target_properties(ModificadorDeVoz PROPERTIES OUTPUT_NAME "ModificadorDeVoz")
-target_sources(ModificadorDeVoz PRIVATE
+juce_add_gui_app(BlackVoice PRODUCT_NAME "BlackVoice" COMPANY_NAME "BlackVoice" VERSION ${PROJECT_VERSION}
+  BUNDLE_ID "com.blackvoice.app"
+  ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/BlackVoice.png"
+  ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/BlackVoice.png")
+set_target_properties(BlackVoice PROPERTIES OUTPUT_NAME "BlackVoice")
+target_sources(BlackVoice PRIVATE
   src/App/Main.cpp src/App/MainWindow.h
   src/Admin/UserAccount.h src/Admin/UserAccount.cpp
   src/Admin/UserManager.h src/Admin/UserManager.cpp
@@ -63,18 +63,18 @@ target_sources(ModificadorDeVoz PRIVATE
   src/Integrations/RoutingDiagnostics.h src/Integrations/RoutingDiagnostics.cpp
   src/Platform/WindowsAudioSettingsLauncher.h
   src/App/AppPaths.h)
-target_include_directories(ModificadorDeVoz PRIVATE src)
-target_compile_definitions(ModificadorDeVoz PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_APPLICATION_NAME_STRING="Modificador de Voz" JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}")
-target_compile_options(ModificadorDeVoz PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
-target_link_libraries(ModificadorDeVoz PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_gui_extra juce::juce_data_structures PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+target_include_directories(BlackVoice PRIVATE src)
+target_compile_definitions(BlackVoice PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_APPLICATION_NAME_STRING="BlackVoice" JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}")
+target_compile_options(BlackVoice PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
+target_link_libraries(BlackVoice PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_gui_extra juce::juce_data_structures PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 enable_testing()
-juce_add_console_app(ModificadorDeVozTests PRODUCT_NAME "Modificador de Voz Tests")
-target_sources(ModificadorDeVozTests PRIVATE tests/Tests.cpp src/DSP/VoiceProcessor.cpp src/Presets/PresetManager.cpp src/Settings/SettingsManager.cpp src/UI/Navigation/PageRouter.cpp src/Integrations/IntegrationProfile.cpp src/Integrations/VirtualDeviceDetector.cpp)
-target_include_directories(ModificadorDeVozTests PRIVATE src)
-target_compile_definitions(ModificadorDeVozTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-target_compile_options(ModificadorDeVozTests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
-target_link_libraries(ModificadorDeVozTests PRIVATE juce::juce_audio_formats juce::juce_audio_devices juce::juce_dsp juce::juce_data_structures PUBLIC juce::juce_recommended_config_flags)
-add_test(NAME ModificadorDeVozTests COMMAND ModificadorDeVozTests)
+juce_add_console_app(BlackVoiceTests PRODUCT_NAME "BlackVoice Tests")
+target_sources(BlackVoiceTests PRIVATE tests/Tests.cpp src/DSP/VoiceProcessor.cpp src/Presets/PresetManager.cpp src/Settings/SettingsManager.cpp src/UI/Navigation/PageRouter.cpp src/Integrations/IntegrationProfile.cpp src/Integrations/VirtualDeviceDetector.cpp)
+target_include_directories(BlackVoiceTests PRIVATE src)
+target_compile_definitions(BlackVoiceTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_options(BlackVoiceTests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
+target_link_libraries(BlackVoiceTests PRIVATE juce::juce_audio_formats juce::juce_audio_devices juce::juce_dsp juce::juce_data_structures PUBLIC juce::juce_recommended_config_flags)
+add_test(NAME BlackVoiceTests COMMAND BlackVoiceTests)
 
-install(TARGETS ModificadorDeVoz RUNTIME DESTINATION . RESOURCE DESTINATION Resources)
+install(TARGETS BlackVoice RUNTIME DESTINATION . RESOURCE DESTINATION Resources)

@@ -140,15 +140,15 @@ void IntegrationsPage::selectTarget(const juce::String &name) {
                  b->getButtonText() == name ? theme::blue : theme::panel);
   juce::String text;
   if (name == "Discord")
-    text = juce::String::fromUTF8("CONFIGURAR NO DISCORD\n\n1. Abra Configurações do Usuário.\n2. Abra Voz e Vídeo.\n3. Em Dispositivo de entrada, selecione o cabo virtual.\n4. Desative supressão de ruído se ela cortar efeitos.\n5. Teste o microfone e confirme os níveis aqui.\n\nDica: sensibilidade automática e ganho automático podem alterar vozes graves.");
+    text = juce::String::fromUTF8("CONFIGURAR NO DISCORD\n\n1. No BlackVoice, escolha seu microfone real como entrada.\n2. No BlackVoice, escolha CABLE Input como saída e clique Aplicar roteamento.\n3. No Discord, abra Configurações > Voz e Vídeo.\n4. Em Dispositivo de entrada, escolha CABLE Output.\n5. Mantenha o BlackVoice ligado durante a chamada.\n\nSe os efeitos forem cortados, desative a supressão de ruído e o ganho automático do Discord.");
   else if (name == "FiveM")
-    text = juce::String::fromUTF8("CONFIGURAR NO FIVEM\n\n1. Selecione o dispositivo virtual como microfone no Windows ou no jogo.\n2. Reinicie o FiveM se a lista não atualizar.\n3. Mantenha o Modificador de Voz aberto e ligado.\n4. Teste no servidor e ajuste o ganho para evitar distorção.\n\nNenhum arquivo do FiveM ou anticheat é modificado.");
+    text = juce::String::fromUTF8("CONFIGURAR NO FIVEM\n\n1. No BlackVoice, envie a saída para CABLE Input.\n2. No Windows ou FiveM, selecione CABLE Output como microfone.\n3. Reinicie o FiveM se a lista não atualizar.\n4. Mantenha o BlackVoice aberto e ligado.\n5. Teste no servidor e ajuste o ganho para evitar distorção.\n\nNenhum arquivo do FiveM ou anticheat é modificado.");
   else if (name == "OBS")
     text = juce::String::fromUTF8("CONFIGURAR NO OBS\n\n1. Adicione uma fonte Captura de Entrada de Áudio.\n2. Selecione o dispositivo virtual.\n3. Desative fontes duplicadas.\n4. Monitore o nível e não adicione o microfone físico ao mesmo tempo.");
   else if (name == "Jogos")
-    text = juce::String::fromUTF8("CONFIGURAR EM JOGOS\n\n1. Abra as configurações de áudio do jogo.\n2. Selecione o dispositivo virtual como entrada.\n3. Se não houver seletor, escolha-o como padrão no Windows.\n4. Reinicie o jogo e teste o chat de voz.\n\nCompatível com jogos que usam entrada normal do Windows, Steam Voice e chats próprios.");
+    text = juce::String::fromUTF8("CONFIGURAR EM JOGOS\n\n1. No BlackVoice, escolha CABLE Input como saída e aplique o roteamento.\n2. No jogo, escolha CABLE Output como microfone.\n3. Se não houver seletor, defina CABLE Output como entrada padrão do Windows.\n4. Reinicie o jogo e teste o chat de voz.\n\nCompatível com jogos que usam a entrada normal do Windows, Steam Voice e chats próprios.");
   else if (name == "Chamadas")
-    text = juce::String::fromUTF8("ZOOM, TEAMS, MEET E OUTROS\n\nAbra as configurações de áudio, selecione o dispositivo virtual como microfone e execute o teste do próprio aplicativo. Mantenha o Modificador de Voz ativo.");
+    text = juce::String::fromUTF8("ZOOM, TEAMS, MEET E OUTROS\n\nNo BlackVoice, escolha CABLE Input como saída. No aplicativo de chamadas, escolha CABLE Output como microfone e execute o teste de áudio. Mantenha o BlackVoice ativo.");
   else
     text = juce::String::fromUTF8("CONFIGURAÇÃO MANUAL\n\nFluxo: microfone físico → processamento → saída virtual → aplicativo de destino.\nPrefira 48.000 Hz e buffer de 256 ou 480 samples. Use fones ao ativar monitoramento.");
   instructions.setText(text, false);
@@ -173,6 +173,15 @@ void IntegrationsPage::applyRouting() {
     }
   auto error = routing.apply(p);
   if (error.isEmpty()) {
+    if (!engine.isRunning())
+      engine.start();
+    const auto monitoringError = engine.setMonitoring(p.monitoring);
+    if (monitoringError.isNotEmpty()) {
+      diagnosticTitle.setText("Roteamento aplicado; falha no monitoramento",
+                              juce::dontSendNotification);
+      diagnosticDetails.setText(monitoringError,
+                                juce::dontSendNotification);
+    }
     p.lastUsed = juce::Time::getCurrentTime();
     profileManager.upsert(p);
     refreshProfiles();
@@ -241,7 +250,7 @@ void IntegrationsPage::paint(juce::Graphics &g) {
   g.setColour(theme::text);
   g.setFont(juce::Font(juce::FontOptions(14, juce::Font::bold)));
   auto flow = flowArea.reduced(16);
-  const juce::StringArray steps{"1  Microfone real", "2  Modificador de Voz",
+  const juce::StringArray steps{"1  Microfone real", "2  BlackVoice",
                                 "3  Dispositivo virtual",
                                 "4  Aplicativo de destino"};
   for (int i = 0; i < 4; ++i) {

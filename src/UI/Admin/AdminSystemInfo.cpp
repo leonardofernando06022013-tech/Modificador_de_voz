@@ -65,7 +65,7 @@ juce::String AdminSystemInfo::buildMode() {
 juce::String AdminSystemInfo::dataFolderName() const {
     // Mostrar apenas o nome da pasta, não o caminho completo
     auto path = AppPaths::data().getFullPathName();
-    // Ex: C:\Users\leona\AppData\Roaming\Modificador de Voz → "Modificador de Voz"
+    // Ex: C:\Users\usuario\AppData\Roaming\BlackVoice → "BlackVoice"
     return AppPaths::data().getFileName();
 }
 

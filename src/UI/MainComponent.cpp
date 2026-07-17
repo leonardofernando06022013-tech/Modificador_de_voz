@@ -28,11 +28,11 @@ MainComponent::MainComponent(AudioEngine &audio, SettingsManager &settingsManage
     else
       notification.showMessage(
           page == 12 ? "Ajuda: passe o mouse sobre os controles para ver dicas."
-                     : "Modificador de Voz v1.0.0");
+                     : "BlackVoice v1.0.0");
   };
   addAndMakeVisible(sidebar);
 
-  title.setText("Modificador de Voz", juce::dontSendNotification);
+  title.setText("BlackVoice", juce::dontSendNotification);
   version.setText("v1.0.0", juce::dontSendNotification);
   styleLabel(title, 21, theme::text, true);
   styleLabel(version, 12, theme::muted);
@@ -140,8 +140,8 @@ MainComponent::MainComponent(AudioEngine &audio, SettingsManager &settingsManage
   power.setColour(juce::TextButton::buttonColourId, theme::blue);
   power.onClick = [this] {
     engine.isRunning() ? engine.stop() : engine.start();
-    notification.showMessage(engine.isRunning() ? "Modificador de voz ativado."
-                                                 : "Modificador de voz desativado.");
+    notification.showMessage(engine.isRunning() ? "BlackVoice ativado."
+                                                 : "BlackVoice desativado.");
   };
   mute.onClick = [this, &parameters] {
     parameters.muted = !parameters.muted.load();
@@ -149,10 +149,15 @@ MainComponent::MainComponent(AudioEngine &audio, SettingsManager &settingsManage
   bypass.onClick = [&parameters] { parameters.bypass = !parameters.bypass.load(); };
   monitor.onClick = [this] {
     const bool enable = !engine.isMonitoring();
+    const bool wasRunning = engine.isRunning();
+    if (enable && !wasRunning)
+      engine.start();
     const auto error = engine.setMonitoring(enable);
+    if (error.isNotEmpty() && !wasRunning)
+      engine.stop();
     notification.showMessage(error.isNotEmpty()
                                  ? "Falha no monitoramento: " + error
-                                 : enable ? "Monitoramento ativo em: " +
+                                 : enable ? "Sua voz está sendo reproduzida em: " +
                                                 engine.monitorDeviceName()
                                           : "Monitoramento desativado.",
                              error.isNotEmpty());
@@ -234,7 +239,7 @@ void MainComponent::showPage(PageId page) {
 
 void MainComponent::updateTexts() {
   auto &localization = LocalizationManager::instance();
-  title.setText(localization.text("app.name"), juce::dontSendNotification);
+  title.setText("BlackVoice", juce::dontSendNotification);
   search.setTextToShowWhenEmpty(localization.text("app.search"), theme::muted);
   search.setTooltip(localization.text("app.search.tooltip"));
   clearSearch.setTooltip(localization.text("app.search.clear"));
