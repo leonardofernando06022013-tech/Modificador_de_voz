@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "Admin/AdminSessionManager.h"
+#include "Admin/AdminAccessController.h"
 #include "Admin/AuditLogManager.h"
 #include "Admin/BackupManager.h"
 #include "Admin/UserManager.h"

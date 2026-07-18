@@ -30,15 +30,26 @@ public:
   bool isFavourite() const { return favourite; }
   const juce::String &presetName() const { return name; }
   const juce::String &presetCategory() const { return category; }
+  const juce::String &recommendedLanguage() const { return language; }
+  void setMetadata(juce::String recommendedLanguage, bool isPremium = false,
+                   bool isDownloaded = true, bool supportsRealtime = true) {
+    language = std::move(recommendedLanguage);
+    premium = isPremium;
+    downloaded = isDownloaded;
+    realtime = supportsRealtime;
+    repaint();
+  }
   std::function<void(bool)> onFavourite;
+  std::function<void()> onPreview;
   void paintButton(juce::Graphics &, bool, bool) override;
   void mouseUp(const juce::MouseEvent &) override;
 
 private:
   void drawAvatar(juce::Graphics &, juce::Rectangle<float>);
-  juce::String name, category;
+  juce::String name, category, language{"PT-BR"};
   int colourIndex = 0;
-  bool selected = false, favourite = false;
+  bool selected = false, favourite = false, premium = false,
+       downloaded = true, realtime = true;
 };
 class SidebarComponent final : public juce::Component {
 public:

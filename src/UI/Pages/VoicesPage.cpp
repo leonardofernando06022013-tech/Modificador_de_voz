@@ -36,15 +36,9 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
     }
   };
   addAndMakeVisible(createVoice);
-  const juce::StringArray filters{"Todas",
-                                  "Favoritas",
-                                  "Naturais",
-                                  "Criativas",
-                                  juce::String::fromUTF8("Robôs"),
-                                  "Terror",
-                                  juce::String::fromUTF8("Rádio"),
-                                  "Dispositivos",
-                                  "Mais"};
+  const juce::StringArray filters{"Todas", "Favoritas", "Naturais",
+                                  "Criativas", juce::String::fromUTF8("Robôs"),
+                                  "Terror"};
   for (auto name : filters) {
     auto *b = chips.add(new juce::TextButton(name));
     b->setColour(juce::TextButton::buttonColourId,
@@ -54,63 +48,116 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
       for (auto *c : chips)
         c->setColour(juce::TextButton::buttonColourId,
                      c == b ? theme::blue : theme::panel);
+      visibleLimit = 72;
       updateFilter();
     };
     addAndMakeVisible(b);
   }
-  advancedFilter.setTooltip(juce::String::fromUTF8("Filtros avançados"));
+  advancedFilter.setTooltip(juce::String::fromUTF8("Mais categorias"));
   advancedFilter.onClick = [this] {
-    activeFilter = "Todas";
-    searchText.clear();
-    for (int i = 0; i < chips.size(); ++i)
-      chips[i]->setColour(juce::TextButton::buttonColourId,
-                          i == 0 ? theme::blue : theme::panel);
-    updateFilter();
-    if (notify)
-      notify("Filtros redefinidos");
+    juce::PopupMenu menu;
+    const juce::StringArray categories{
+        "Graves", "Agudas", juce::String::fromUTF8("Rádio"),
+        "Dispositivos", "Personagens", "Espaciais", "Jogos",
+        "Personalizadas"};
+    for (int i = 0; i < categories.size(); ++i)
+      menu.addItem(i + 1, categories[i], true, activeFilter == categories[i]);
+    menu.addSeparator();
+    menu.addItem(100, "Limpar filtros");
+    menu.showMenuAsync({}, [this, categories](int result) {
+      if (result == 0) return;
+      activeFilter = result == 100 ? "Todas" : categories[result - 1];
+      if (result == 100) {
+        searchText.clear();
+        languageFilter.setSelectedId(1, juce::dontSendNotification);
+      }
+      for (int i = 0; i < chips.size(); ++i)
+        chips[i]->setColour(juce::TextButton::buttonColourId,
+                            activeFilter == chips[i]->getButtonText()
+                                ? theme::blue : theme::panel);
+      visibleLimit = 72;
+      updateFilter();
+    });
   };
   addAndMakeVisible(advancedFilter);
+  languageFilter.addItemList({"Todos os idiomas", "Multilíngue"}, 1);
+  languageFilter.setSelectedId(1);
+  languageFilter.setTooltip("Filtrar pelo idioma recomendado da voz");
+  languageFilter.onChange = [this] { visibleLimit = 72; updateFilter(); };
+  addAndMakeVisible(languageFilter);
+  setupLabel(resultsLabel, 11, theme::muted, true);
+  resultsLabel.setJustificationType(juce::Justification::centredRight);
+  addAndMakeVisible(resultsLabel);
   viewport.setViewedComponent(&grid, false);
   viewport.setScrollBarsShown(true, false);
   addAndMakeVisible(viewport);
-  const auto names = presets.names();
-  auto favourites = settings.favourites();
-  for (int i = 0; i < names.size(); ++i) {
-    auto *c = cards.add(
-        new VoiceCardComponent(names[i], presets.categoryFor(names[i]), i));
-    c->setSelected(i == 0);
-    c->setFavourite(favourites.contains(names[i]));
-    c->onClick = [this, i] { applyVoice(i); };
-    c->onFavourite = [this, c](bool value) {
-      settings.setFavourite(c->presetName(), value);
-      if (activeFilter == "Favoritas")
-        updateFilter();
-      if (notify)
-        notify(value ? "Adicionado aos favoritos" : "Removido dos favoritos");
-    };
-    grid.addAndMakeVisible(c);
-  }
+  loadMore.setColour(juce::TextButton::buttonColourId, theme::elevated);
+  loadMore.onClick = [this] { visibleLimit += 72; rebuildCards(); };
+  grid.addAndMakeVisible(loadMore);
+  catalogNames = presets.names();
+  selectedPresetName = catalogNames.isEmpty() ? juce::String("Voz normal limpa")
+                                               : catalogNames[0];
+  selectedPresetCategory = presets.categoryFor(selectedPresetName);
+  rebuildCards();
   selectedCaption.setText("VOZ SELECIONADA", juce::dontSendNotification);
-  selectedName.setText(names[0], juce::dontSendNotification);
-  selectedType.setText(presets.categoryFor(names[0]), juce::dontSendNotification);
+  selectedName.setText(selectedPresetName, juce::dontSendNotification);
+  selectedType.setText(selectedPresetCategory + " · " +
+                           languageFor(selectedPresetName) + " · tempo real",
+                       juce::dontSendNotification);
   setupLabel(selectedCaption, 10, theme::muted, true);
   setupLabel(selectedName, 17, theme::text, true);
   setupLabel(selectedType, 12, theme::muted);
   for (auto *l : {&selectedCaption, &selectedName, &selectedType})
     addAndMakeVisible(l);
   favouriteButton.onClick = [this] {
-    auto *c = cards[selectedIndex];
-    c->setFavourite(!c->isFavourite());
-    settings.setFavourite(c->presetName(), c->isFavourite());
-    favouriteButton.setButtonText(c->isFavourite()
+    const bool value = !settings.isFavourite(selectedPresetName);
+    settings.setFavourite(selectedPresetName, value);
+    for (auto *card : cards)
+      if (card->presetName() == selectedPresetName) card->setFavourite(value);
+    favouriteButton.setButtonText(value
                                       ? juce::String::fromUTF8("♥")
                                       : juce::String::fromUTF8("♡"));
+    if (activeFilter == "Favoritas") rebuildCards();
   };
   addAndMakeVisible(favouriteButton);
   menuButton.onClick = [this] {
-    if (notify)
-      notify(juce::String::fromUTF8(
-          "Ações da voz: salvar, redefinir ou favoritar"));
+    juce::PopupMenu menu;
+    menu.addItem(1, "Salvar alterações", dirty);
+    menu.addItem(2, "Redefinir para o preset");
+    menu.addItem(3, settings.isFavourite(selectedPresetName)
+                        ? "Remover dos favoritos" : "Adicionar aos favoritos");
+    const bool custom = selectedPresetCategory == "Personalizadas";
+    if (custom) {
+      menu.addSeparator();
+      menu.addItem(4, "Excluir voz personalizada");
+    }
+    menu.showMenuAsync({}, [this, custom](int result) {
+      if (result == 1) saveButton.triggerClick();
+      else if (result == 2) resetButton.triggerClick();
+      else if (result == 3) favouriteButton.triggerClick();
+      else if (result == 4 && custom) {
+        const auto name = selectedPresetName;
+        juce::AlertWindow::showOkCancelBox(
+            juce::MessageBoxIconType::WarningIcon,
+            "Excluir voz personalizada",
+            "Excluir \"" + name + "\"? Esta ação não pode ser desfeita.",
+            "Excluir", "Cancelar", this,
+            juce::ModalCallbackFunction::create([this, name](int confirmed) {
+              if (!confirmed) return;
+              if (!presets.remove(name)) {
+                if (notify) notify("Não foi possível excluir a voz");
+                return;
+              }
+              catalogNames.removeString(name);
+              selectedPresetName = catalogNames.isEmpty()
+                                       ? juce::String("Voz normal limpa")
+                                       : catalogNames[0];
+              rebuildCards();
+              applyVoiceByName(selectedPresetName);
+              if (notify) notify("Voz personalizada excluída");
+            }));
+      }
+    });
   };
   addAndMakeVisible(menuButton);
   auto &pms = engine.parameters();
@@ -184,6 +231,10 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
   saveButton.setColour(juce::TextButton::buttonColourId, theme::blue);
   saveButton.onClick = [this] {
     if (presets.save(selectedVoice(), engine.parameters())) {
+      selectedPresetCategory = presets.categoryFor(selectedPresetName);
+      selectedType.setText(selectedPresetCategory + " · " +
+                               languageFor(selectedPresetName) + " · tempo real",
+                           juce::dontSendNotification);
       dirty = false;
       dirtyLabel.setVisible(false);
       saveButton.setEnabled(false);
@@ -192,7 +243,7 @@ VoicesPage::VoicesPage(AudioEngine &e, SettingsManager &s, PresetManager &p)
     }
   };
   resetButton.onClick = [this] {
-    applyVoice(selectedIndex);
+    applyVoiceByName(selectedPresetName);
     dirty = false;
     dirtyLabel.setVisible(false);
     saveButton.setEnabled(false);
@@ -233,7 +284,11 @@ void VoicesPage::selectDetailsSection(DetailsSection section) {
     break;
   case DetailsSection::Equalizer:
     body = "Passa-altas: " + juce::String(p.hpFreq.load(), 0) +
-           " Hz\nPassa-baixas: " + juce::String(p.lpFreq.load(), 0) + " Hz";
+           " Hz\nPassa-baixas: " + juce::String(p.lpFreq.load(), 0) +
+           " Hz\nGraves / Médios / Agudos: " +
+           juce::String(p.bassDb.load(), 1) + " / " +
+           juce::String(p.midDb.load(), 1) + " / " +
+           juce::String(p.trebleDb.load(), 1) + " dB";
     break;
   case DetailsSection::Dynamics:
     body = "Compressor: " +
@@ -270,44 +325,30 @@ void VoicesPage::selectDetailsSection(DetailsSection section) {
 }
 
 juce::String VoicesPage::selectedVoice() const {
-  return cards[selectedIndex]->presetName();
+  return selectedPresetName;
 }
 juce::String VoicesPage::selectedCategory() const {
-  return cards[selectedIndex]->presetCategory();
+  return selectedPresetCategory;
 }
 void VoicesPage::addCustomVoiceCard(const juce::String &name,
                                     bool selectAfterAdding) {
-  for (auto *existing : cards)
-    if (existing->presetName() == name) {
-      if (selectAfterAdding)
-        applyVoice(cards.indexOf(existing));
-      return;
-    }
-  auto *card = cards.add(
-      new VoiceCardComponent(name, "Personalizadas", cards.size() + 3));
-  card->setFavourite(settings.isFavourite(name));
-  card->onClick = [this, card] { applyVoice(cards.indexOf(card)); };
-  card->onFavourite = [this, card](bool value) {
-    settings.setFavourite(card->presetName(), value);
-    if (activeFilter == "Favoritas")
-      updateFilter();
-    if (notify)
-      notify(value ? "Adicionado aos favoritos" : "Removido dos favoritos");
-  };
-  grid.addAndMakeVisible(card);
+  catalogNames.addIfNotAlreadyThere(name);
   activeFilter = "Todas";
   searchText.clear();
+  languageFilter.setSelectedId(1, juce::dontSendNotification);
+  visibleLimit = 72;
   for (int i = 0; i < chips.size(); ++i)
     chips[i]->setColour(juce::TextButton::buttonColourId,
                         i == 0 ? theme::blue : theme::panel);
-  updateFilter();
+  rebuildCards();
   if (selectAfterAdding) {
-    applyVoice(cards.indexOf(card));
+    applyVoiceByName(name);
     viewport.setViewPositionProportionately(0.0, 1.0);
   }
 }
 void VoicesPage::setSearchText(const juce::String &text) {
   searchText = text.trim();
+  visibleLimit = 72;
   updateFilter();
 }
 bool VoicesPage::runSmokeTest() {
@@ -319,8 +360,8 @@ bool VoicesPage::runSmokeTest() {
     return false;
   setSearchText(juce::String::fromUTF8("Robô"));
   setSearchText({});
-  applyVoice(1);
-  applyVoice(0);
+  if (catalogNames.size() > 1) applyVoiceByName(catalogNames[1]);
+  if (!catalogNames.isEmpty()) applyVoiceByName(catalogNames[0]);
   const juce::Point<int> sizes[]{{900, 570}, {1080, 590}, {1240, 770},
                                  {1720, 950}};
   for (const auto size : sizes) {
@@ -362,40 +403,101 @@ void VoicesPage::syncControls() {
   selectDetailsSection(selectedSection);
 }
 void VoicesPage::applyVoice(int index) {
-  selectedIndex = index;
-  for (int i = 0; i < cards.size(); ++i)
-    cards[i]->setSelected(i == index);
-  auto name = selectedVoice();
+  if (juce::isPositiveAndBelow(index, cards.size()))
+    applyVoiceByName(cards[index]->presetName());
+}
+void VoicesPage::applyVoiceByName(const juce::String &name, bool preview) {
+  selectedPresetName = name;
+  selectedPresetCategory = presets.categoryFor(name);
+  selectedIndex = 0;
+  for (int i = 0; i < cards.size(); ++i) {
+    cards[i]->setSelected(cards[i]->presetName() == name);
+    if (cards[i]->presetName() == name) selectedIndex = i;
+  }
   presets.load(name, engine.parameters());
+  settings.setPreference("activePreset", name);
   selectedName.setText(name, juce::dontSendNotification);
-  selectedType.setText(selectedCategory(), juce::dontSendNotification);
-  favouriteButton.setButtonText(cards[index]->isFavourite()
+  selectedType.setText(selectedPresetCategory + " · " + languageFor(name) +
+                           " · tempo real",
+                       juce::dontSendNotification);
+  favouriteButton.setButtonText(settings.isFavourite(name)
                                     ? juce::String::fromUTF8("♥")
                                     : juce::String::fromUTF8("♡"));
   syncControls();
   dirty = false;
   dirtyLabel.setVisible(false);
   saveButton.setEnabled(false);
-  if (notify)
+  if (preview) {
+    if (!engine.isRunning()) engine.start();
+    const auto error = engine.isMonitoring() ? juce::String()
+                                              : engine.setMonitoring(true);
+    if (notify)
+      notify(error.isEmpty()
+                 ? "Teste ativo em " + engine.monitorDeviceName() +
+                       ". Use fones para evitar eco."
+                 : "Voz aplicada, mas o teste falhou: " + error);
+  } else if (notify) {
     notify("Voz aplicada: " + name);
+  }
   repaint();
 }
 void VoicesPage::updateFilter() {
-  for (auto *c : cards) {
-    const bool text = searchText.isEmpty() ||
-                      c->presetName().containsIgnoreCase(searchText) ||
-                      c->presetCategory().containsIgnoreCase(searchText);
-    bool category = activeFilter == "Todas" || activeFilter == "Mais";
-    if (activeFilter == "Favoritas")
-      category = c->isFavourite();
-    else if (!category)
-      category = c->presetCategory().containsIgnoreCase(activeFilter);
-    c->setVisible(text && category);
+  rebuildCards();
+}
+juce::String VoicesPage::languageFor(const juce::String &name) const {
+  juce::ignoreUnused(name);
+  return "Multilíngue";
+}
+bool VoicesPage::matchesFilter(const juce::String &name) const {
+  const auto category = presets.categoryFor(name);
+  const bool textMatches = searchText.isEmpty() ||
+      name.containsIgnoreCase(searchText) ||
+      category.containsIgnoreCase(searchText) ||
+      languageFor(name).containsIgnoreCase(searchText);
+  bool categoryMatches = activeFilter == "Todas";
+  if (activeFilter == "Favoritas") categoryMatches = favouriteNames.contains(name);
+  else if (!categoryMatches)
+    categoryMatches = category.containsIgnoreCase(activeFilter);
+  const int languageId = languageFilter.getSelectedId();
+  const bool languageMatches = languageId <= 1 ||
+      languageFor(name) == languageFilter.getItemText(languageId - 1);
+  return textMatches && categoryMatches && languageMatches;
+}
+void VoicesPage::rebuildCards() {
+  cards.clear();
+  matchingCount = 0;
+  favouriteNames = settings.favourites();
+  for (int i = 0; i < catalogNames.size(); ++i) {
+    const auto name = catalogNames[i];
+    if (!matchesFilter(name)) continue;
+    ++matchingCount;
+    if (cards.size() >= visibleLimit) continue;
+    auto *card = cards.add(
+        new VoiceCardComponent(name, presets.categoryFor(name), i));
+    card->setMetadata(languageFor(name), false, true, true);
+    card->setSelected(name == selectedPresetName);
+    card->setFavourite(favouriteNames.contains(name));
+    card->onClick = [this, name] { applyVoiceByName(name); };
+    card->onPreview = [this, name] { applyVoiceByName(name, true); };
+    card->onFavourite = [this, name](bool value) {
+      settings.setFavourite(name, value);
+      if (activeFilter == "Favoritas") rebuildCards();
+      if (notify)
+        notify(value ? "Adicionado aos favoritos" : "Removido dos favoritos");
+    };
+    grid.addAndMakeVisible(card);
   }
+  resultsLabel.setText("Exibindo " + juce::String(cards.size()) + " de " +
+                           juce::String(matchingCount),
+                       juce::dontSendNotification);
+  loadMore.setVisible(cards.size() < matchingCount);
+  loadMore.setButtonText("Mostrar mais " +
+                         juce::String(juce::jmin(72, matchingCount - cards.size())) +
+                         " vozes");
   resized();
 }
 void VoicesPage::paint(juce::Graphics &g) {
-  g.fillAll(theme::background);
+  theme::paintBackground(g, getLocalBounds());
   g.setColour(theme::border);
   g.drawLine((float)headerArea.getX(), (float)headerArea.getBottom(),
              (float)headerArea.getRight(), (float)headerArea.getBottom());
@@ -416,18 +518,34 @@ void VoicesPage::paint(juce::Graphics &g) {
   g.setFont(juce::Font(juce::FontOptions(12, juce::Font::bold)));
   g.drawText(juce::String::fromUTF8("CONTROLES RÁPIDOS"),
              quickControlsHeaderArea, juce::Justification::centredLeft);
+  if (matchingCount == 0) {
+    g.setColour(theme::muted);
+    g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
+    g.drawText("Nenhuma voz encontrada",
+               gridArea.reduced(20).removeFromTop(42),
+               juce::Justification::centred);
+    g.setFont(12.0f);
+    g.drawText("Limpe os filtros ou tente outro termo de pesquisa.",
+               gridArea.reduced(20).withTrimmedTop(44).removeFromTop(30),
+               juce::Justification::centred);
+  }
 }
 void VoicesPage::resized() {
   auto area = getLocalBounds().reduced(12);
   detailsArea = area.removeFromRight(getWidth() < 1180 ? 270 : 300);
   area.removeFromRight(12);
   headerArea = area.removeFromTop(74);
-  title.setBounds(headerArea.removeFromTop(34));
-  subtitle.setBounds(headerArea);
+  auto header = headerArea;
+  title.setBounds(header.removeFromTop(34));
+  subtitle.setBounds(header);
   createVoice.setBounds(area.getRight() - 210, getLocalBounds().getY() + 19,
                         205, 38);
+  resultsLabel.setBounds(createVoice.getX() - 145, createVoice.getY(), 135,
+                         createVoice.getHeight());
   filterArea = area.removeFromTop(54);
   auto chipsArea = filterArea;
+  languageFilter.setBounds(chipsArea.removeFromRight(150).reduced(3, 9));
+  chipsArea.removeFromRight(5);
   for (auto *b : chips) {
     int w = juce::jlimit(66, 110, b->getButtonText().length() * 8 + 24);
     b->setBounds(chipsArea.removeFromLeft(w).reduced(3, 9));
@@ -442,16 +560,23 @@ void VoicesPage::resized() {
   for (auto *c : cards) {
     if (!c->isVisible())
       continue;
-    c->setBounds(x, y, cardW, 210);
+    c->setBounds(x, y, cardW, 230);
     if (++col >= columns) {
       col = 0;
       x = 8;
-      y += 220;
+      y += 240;
     } else
       x += cardW + gap;
   }
+  if (col != 0) y += 240;
+  if (loadMore.isVisible()) {
+    loadMore.setBounds(8, y + 4, juce::jmax(180, gridArea.getWidth() - 32), 38);
+    y += 50;
+  } else {
+    loadMore.setBounds({});
+  }
   grid.setSize(juce::jmax(420, gridArea.getWidth() - 14),
-               juce::jmax(gridArea.getHeight(), y + 220));
+               juce::jmax(gridArea.getHeight(), y + 12));
   auto d = detailsArea.reduced(14);
   const bool compactDetails = detailsArea.getHeight() < 650;
   auto actions =

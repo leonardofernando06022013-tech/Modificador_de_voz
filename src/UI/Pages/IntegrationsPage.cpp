@@ -58,16 +58,27 @@ IntegrationsPage::IntegrationsPage(AudioEngine &e) : engine(e), routing(e) {
   };
   saveProfileButton.onClick = [this] { saveProfile(); };
   profileBox.setEditableText(true);
-  duplicateProfile.onClick=[this]{auto items=profileManager.load();for(auto&p:items)if(p.name==profileBox.getText()){p.name+=juce::String::fromUTF8(" - cópia");profileManager.upsert(p);refreshProfiles();profileBox.setText(p.name,juce::dontSendNotification);if(notify)notify("Perfil duplicado");break;}};
-  exportProfiles.onClick=[this]{auto file=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("integration-profiles.json");if(profileManager.exportTo(file)&&notify)notify("Perfis exportados para Documentos");};
+  duplicateProfile.onClick=[this]{auto items=profileManager.load();for(auto&p:items)if(p.name==profileBox.getText()){p.name+=juce::String::fromUTF8(" - cópia");if(profileManager.upsert(p)){refreshProfiles();profileBox.setText(p.name,juce::dontSendNotification);if(notify)notify("Perfil duplicado");}else if(notify)notify("Não foi possível duplicar o perfil");return;}if(notify)notify("Selecione um perfil salvo para duplicar");};
+  exportProfiles.onClick=[this]{auto file=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("integration-profiles.json");if(profileManager.exportTo(file)){if(notify)notify("Perfis exportados para Documentos");}else if(notify)notify("Não foi possível exportar os perfis");};
   importProfiles.onClick=[this]{auto file=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("integration-profiles.json");if(profileManager.importFrom(file)){refreshProfiles();if(notify)notify("Perfis importados");}else if(notify)notify(juce::String::fromUTF8("Arquivo de perfis não encontrado ou inválido"));};
+  deleteProfile.setComponentID("danger");
   deleteProfile.onClick = [this] {
-    if (profileBox.getText().isNotEmpty()) {
-      profileManager.remove(profileBox.getText());
-      refreshProfiles();
-      if (notify)
-        notify("Perfil removido");
+    const auto name = profileBox.getText().trim();
+    if (name.isEmpty()) {
+      if (notify) notify("Selecione um perfil para remover");
+      return;
     }
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon, "Remover perfil",
+        "Remover o perfil de integração \"" + name + "\"?", "Remover",
+        "Cancelar", this,
+        juce::ModalCallbackFunction::create([this, name](int confirmed) {
+          if (!confirmed) return;
+          if (profileManager.remove(name)) {
+            refreshProfiles();
+            if (notify) notify("Perfil removido");
+          } else if (notify) notify("Perfil não encontrado");
+        }));
   };
   profileBox.onChange = [this] {
     auto items = profileManager.load();
@@ -90,11 +101,12 @@ IntegrationsPage::IntegrationsPage(AudioEngine &e) : engine(e), routing(e) {
   instructions.setColour(juce::TextEditor::backgroundColourId, theme::panel);
   addAndMakeVisible(instructions);
   integrationLabel(virtualWarning, 12, theme::yellow, true);
+  integrationLabel(applicationStatus, 12, theme::muted, true);
   integrationLabel(diagnosticTitle, 15, theme::text, true);
   integrationLabel(diagnosticDetails, 11, theme::muted);
   integrationLabel(inputMeterLabel, 11, theme::muted, true);
   integrationLabel(outputMeterLabel, 11, theme::muted, true);
-  for (auto *l : {&virtualWarning, &diagnosticTitle, &diagnosticDetails,
+  for (auto *l : {&applicationStatus, &virtualWarning, &diagnosticTitle, &diagnosticDetails,
                   &inputMeterLabel, &outputMeterLabel})
     addAndMakeVisible(l);
   addAndMakeVisible(inputMeter);
@@ -138,6 +150,11 @@ void IntegrationsPage::selectTarget(const juce::String &name) {
   for (auto *b : targets)
     b->setColour(juce::TextButton::buttonColourId,
                  b->getButtonText() == name ? theme::blue : theme::panel);
+  const bool running = ApplicationDetector::isTargetRunning(name);
+  applicationStatus.setText(ApplicationDetector::statusFor(name),
+                            juce::dontSendNotification);
+  applicationStatus.setColour(juce::Label::textColourId,
+                              running ? theme::green : theme::muted);
   juce::String text;
   if (name == "Discord")
     text = juce::String::fromUTF8("CONFIGURAR NO DISCORD\n\n1. No BlackVoice, escolha seu microfone real como entrada.\n2. No BlackVoice, escolha CABLE Input como saída e clique Aplicar roteamento.\n3. No Discord, abra Configurações > Voz e Vídeo.\n4. Em Dispositivo de entrada, escolha CABLE Output.\n5. Mantenha o BlackVoice ligado durante a chamada.\n\nSe os efeitos forem cortados, desative a supressão de ruído e o ganho automático do Discord.");
@@ -198,7 +215,8 @@ void IntegrationsPage::applyRouting() {
 void IntegrationsPage::testRouting() {
   auto result = RoutingDiagnostics::run(engine, detected);
   diagnosticTitle.setText(result.headline, juce::dontSendNotification);
-  diagnosticDetails.setText(result.details + juce::String::fromUTF8("  Latência estimada: ") +
+  diagnosticDetails.setText(ApplicationDetector::statusFor(target) + "\n" +
+                                result.details + juce::String::fromUTF8("  Latência estimada: ") +
                                 juce::String(routing.latencyMs(), 1) + " ms.",
                             juce::dontSendNotification);
   diagnosticTitle.setColour(juce::Label::textColourId,
@@ -244,7 +262,7 @@ void IntegrationsPage::timerCallback() {
                            juce::dontSendNotification);
 }
 void IntegrationsPage::paint(juce::Graphics &g) {
-  g.fillAll(theme::background);
+  theme::paintBackground(g, getLocalBounds());
   for (auto r : {flowArea, setupArea, guideArea, statusArea})
     theme::roundedPanel(g, r.toFloat(), 12, theme::panel);
   g.setColour(theme::text);
@@ -292,6 +310,7 @@ void IntegrationsPage::resized() {
   statusArea = right;
   auto setup = setupArea.reduced(16);
   setup.removeFromTop(38);
+  applicationStatus.setBounds(setup.removeFromTop(26));
   virtualWarning.setBounds(setup.removeFromTop(48));
   auto row = setup.removeFromTop(38);
   inputBox.setBounds(row.removeFromLeft(row.getWidth() / 2).reduced(2));

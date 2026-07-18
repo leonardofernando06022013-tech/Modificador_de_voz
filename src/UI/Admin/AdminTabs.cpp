@@ -124,8 +124,8 @@ AdminSecurityTab::AdminSecurityTab(AdminSessionManager &s) : session(s) {
     const char *secItems[] = {
         "Expira\xC3\xa7\xC3\xa3o da sess\xC3\xa3o: 30 minutos",
         "Aviso de expira\xC3\xa7\xC3\xa3o: 3 minutos antes",
-        "Confirma\xC3\xa7\xC3\xa3o para a\xC3\xa7\xC3\xb5\x65s cr\xC3\xadticas: Ativa",
-        "Auditoria obrigat\xC3\xb3ria: Ativa",
+        "Confirma\xC3\xa7\xC3\xa3o para exclus\xC3\xb5\x65s, bloqueios e limpeza: Ativa",
+        "Auditoria local: sess\xC3\xb5\x65s, backups, exporta\xC3\xa7\xC3\xb5\x65s e logs",
         "Identidade: conta atual do Windows",
         "Nenhuma senha ou token \xC3\xa9 armazenado",
         "Controle de acesso: local (sem servidor)",
@@ -358,12 +358,12 @@ AdminSettingsTab::AdminSettingsTab(AdminSessionManager &s) : session(s) {
     addAndMakeVisible(heading);
 
     const char *settingItems[] = {
-        "Reten\xC3\xa7\xC3\xa3o de logs: 30 dias",
-        "Auditoria obrigat\xC3\xb3ria: Ativa",
+        "Limpeza manual de logs antigos: arquivos com mais de 30 dias",
+        "Auditoria local: a\xC3\xa7\xC3\xb5\x65s administrativas principais",
         "Backup autom\xC3\xa1tico: Desativado",
         "Sess\xC3\xa3o: 30 minutos",
-        "Aprova\xC3\xa7\xC3\xa3o de presets: Requerida",
-        "Notifica\xC3\xa7\xC3\xb5\x65s de seguran\xC3\xa7\xC3\xa1: Ativas",
+        "Aprova\xC3\xa7\xC3\xa3o remota de presets: N\xC3\xa3o dispon\xC3\xadvel",
+        "Avisos de expira\xC3\xa7\xC3\xa3o da sess\xC3\xa3o: Ativos",
     };
     for (auto *text : settingItems) {
         auto *l = items.add(new juce::Label({}, juce::String::fromUTF8(text)));
@@ -374,8 +374,8 @@ AdminSettingsTab::AdminSettingsTab(AdminSessionManager &s) : session(s) {
 
     disclaimer.setText(
         juce::String::fromUTF8(
-            "As configurações abaixo afetam o comportamento local do painel administrativo.\n"
-            "Somente usuários com permissão adequada podem alterá-las."),
+            "Esta aba mostra o estado efetivo do painel administrativo local.\n"
+            "Opções sem backend não são apresentadas como controles editáveis."),
         juce::dontSendNotification);
     disclaimer.setColour(juce::Label::textColourId, theme::muted);
     disclaimer.setFont(juce::Font(juce::FontOptions(11)));

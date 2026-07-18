@@ -16,6 +16,8 @@ public:
     juce::String lastError() const { const juce::ScopedLock lock(errorLock); return error; }
     juce::String setMonitoring(bool enabled);
     bool isMonitoring() const noexcept { return monitoring.load(); }
+    void setAutoReconnect(bool enabled) noexcept { autoReconnect.store(enabled); }
+    bool autoReconnectEnabled() const noexcept { return autoReconnect.load(); }
     juce::String monitorDeviceName() const;
     void saveDeviceState();
     juce::String loadSoundboardFile(const juce::File &);
@@ -55,6 +57,7 @@ private:
     juce::AudioBuffer<float> monitorRing{2, 96000};
     juce::AbstractFifo monitorFifo{96000};
     std::atomic<bool> monitoring{false};
+    std::atomic<bool> autoReconnect{true};
     std::atomic<bool> running{false}; std::atomic<double> cpu{0}; std::atomic<uint64_t> xruns{0};
     std::atomic<double> activeSampleRate{48000.0}; std::atomic<int> preparedSamples{0};
     juce::String error; mutable juce::CriticalSection errorLock;

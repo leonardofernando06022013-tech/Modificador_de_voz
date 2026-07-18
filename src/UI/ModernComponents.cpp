@@ -192,6 +192,14 @@ void VoiceCardComponent::paintButton(juce::Graphics &g, bool hover, bool down) {
     g.drawText("OK", (int)r.getX() + 9, (int)r.getY() + 9, 18, 18,
                juce::Justification::centred);
   }
+  auto localBadge = juce::Rectangle<float>(r.getX() + 9, r.getY() + 9, 48, 18);
+  if (selected) localBadge.setX(localBadge.getX() + 22);
+  g.setColour((downloaded ? theme::green : theme::yellow).withAlpha(.14f));
+  g.fillRoundedRectangle(localBadge, 7);
+  g.setColour(downloaded ? theme::green : theme::yellow);
+  g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
+  g.drawText(downloaded ? "LOCAL" : "BAIXAR", localBadge,
+             juce::Justification::centred);
   g.setColour(favourite ? juce::Colour(0xffff4fa3) : theme::muted);
   auto heart = juce::Rectangle<float>(r.getRight() - 26, r.getY() + 12, 15, 14);
   juce::Path heartPath;
@@ -207,17 +215,21 @@ void VoiceCardComponent::paintButton(juce::Graphics &g, bool hover, bool down) {
   g.setColour(theme::text);
   g.setFont(juce::Font(juce::FontOptions(14, juce::Font::bold)));
   g.drawFittedText(name,
-                   r.withTrimmedTop(102).withTrimmedBottom(27).toNearestInt(),
+                   r.withTrimmedTop(102).withTrimmedBottom(54).toNearestInt(),
                    juce::Justification::centred, 2);
+  auto meta = r.withTrimmedTop(r.getHeight() - 55).withTrimmedBottom(28);
   g.setColour(theme::muted);
-  g.setFont(11);
-  g.drawText(
-      category,
-      r.withTrimmedTop(r.getHeight() - 28).withTrimmedRight(22).toNearestInt(),
-      juce::Justification::centred);
-  g.setFont(16);
-  g.drawText(juce::String::fromUTF8("⋮"), (int)r.getRight() - 23,
-             (int)r.getBottom() - 27, 18, 20, juce::Justification::centred);
+  g.setFont(9.5f);
+  const auto access = premium ? "PREMIUM" : "GRÁTIS";
+  g.drawFittedText(category + "  ·  " + language + "  ·  " + access,
+                   meta.toNearestInt(), juce::Justification::centred, 1);
+  auto preview = r.withTrimmedTop(r.getHeight() - 29).reduced(8, 4);
+  g.setColour(theme::blue.withAlpha(.13f));
+  g.fillRoundedRectangle(preview, 6);
+  g.setColour(realtime ? theme::cyan : theme::disabled);
+  g.setFont(juce::Font(juce::FontOptions(9.5f, juce::Font::bold)));
+  g.drawText(realtime ? "▶ TESTAR EM TEMPO REAL" : "INDISPONÍVEL", preview,
+             juce::Justification::centred);
   if (down) {
     g.setColour(theme::background.withAlpha(.15f));
     g.fillRoundedRectangle(r, 11);
@@ -229,6 +241,10 @@ void VoiceCardComponent::mouseUp(const juce::MouseEvent &e) {
     if (onFavourite)
       onFavourite(favourite);
     repaint();
+    return;
+  }
+  if (e.position.y > getHeight() - 38 && realtime && onPreview) {
+    onPreview();
     return;
   }
   juce::Button::mouseUp(e);

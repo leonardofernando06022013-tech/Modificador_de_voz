@@ -9,6 +9,7 @@ struct Parameters {
     std::atomic<float> gateThreshold{-55}, gateAttack{5}, gateRelease{120};
     std::atomic<float> compressorThreshold{-18}, compressorRatio{3}, compressorAttack{10}, compressorRelease{100};
     std::atomic<float> hpFreq{70}, lpFreq{18000}, noiseReduction{0.25f};
+    std::atomic<float> bassDb{0}, midDb{0}, trebleDb{0};
     std::atomic<float> distortion{0}, chorus{0}, flanger{0}, delay{0}, reverb{0}, ringMod{0}, bitCrush{0};
     std::atomic<bool> bypass{false}, muted{false}, gateEnabled{true}, cleanupEnabled{true}, compressorEnabled{true}, limiterEnabled{true}, phaseInvert{false};
 };
@@ -41,12 +42,15 @@ private:
     juce::dsp::Limiter<float> limiter;
     juce::dsp::Chorus<float> chorus;
     juce::dsp::DelayLine<float> delay{96000};
+    juce::dsp::DelayLine<float> flangerDelay{4096};
     juce::dsp::Reverb reverb;
     juce::AudioBuffer<float> dry, wet;
     juce::LinearSmoothedValue<float> inputGain, outputGain, mix;
     juce::LinearSmoothedValue<float> formantAmount;
     std::atomic<float> inPeak{0}, outPeak{0};
-    double sampleRate = 48000; float gateEnvelope = 0, ringPhase = 0, delayFeedback = 0;
-    std::array<float, 2> hpX{}, hpY{}, lpY{}, formantLow{}, dcX{}, dcY{};
+    double sampleRate = 48000; float gateEnvelope = 0, ringPhase = 0,
+        flangerPhase = 0, delayFeedback = 0;
+    std::array<float, 2> hpX{}, hpY{}, lpY{}, toneLow{}, toneHigh{},
+        formantLow{}, dcX{}, dcY{};
 };
 }

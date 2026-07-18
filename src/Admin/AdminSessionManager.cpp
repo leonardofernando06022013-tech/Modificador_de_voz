@@ -19,18 +19,12 @@ AdminSessionManager::AdminSessionManager() = default;
 bool AdminSessionManager::begin(int durationMinutes) {
     info.user = users.currentUser();
 
-    // Usuário vazio = sem conta registrada → promover automaticamente como SuperAdmin local
+    // O primeiro proprietário é criado pelo UserManager somente quando o
+    // armazenamento ainda não existe. Um segundo usuário do Windows nunca deve
+    // receber privilégios apenas por não estar cadastrado.
     if (info.user.id.isEmpty()) {
-        // Primeira execução: criar conta owner com o login do Windows
-        UserAccount owner;
-        owner.id              = juce::Uuid().toString();
-        owner.name            = juce::SystemStats::getLogonName();
-        owner.windowsIdentity = owner.name;
-        owner.role            = Role::SuperAdministrator;
-        owner.status          = UserStatus::Active;
-        owner.created         = owner.lastAccess = juce::Time::getCurrentTime();
-        users.upsert(owner);
-        info.user = owner;
+        setState(AdminSessionState::Expired, "Usuário local não autorizado");
+        return false;
     }
 
     if (info.user.id.isEmpty() ||
@@ -58,10 +52,14 @@ bool AdminSessionManager::begin(int durationMinutes) {
 
 bool AdminSessionManager::renew() {
     if (info.user.id.isEmpty()) return begin();
-    if (info.user.status == UserStatus::Blocked) {
-        setState(AdminSessionState::Locked, juce::String::fromUTF8("Conta bloqueada"));
+    const auto persisted = users.currentUser();
+    if (persisted.id.isEmpty() || persisted.status != UserStatus::Active ||
+        persisted.role == Role::User) {
+        setState(AdminSessionState::Locked,
+                 juce::String::fromUTF8("Conta sem permissão administrativa"));
         return false;
     }
+    info.user = persisted;
 
     controller.begin(info.user, info.sessionDurationMinutes);
     info.expiresAt   = juce::Time::getCurrentTime() +

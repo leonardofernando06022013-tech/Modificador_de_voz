@@ -24,6 +24,11 @@ ModulePage::ModulePage(Kind pageKind, AudioEngine &audio,
   emptyState.setJustificationType(juce::Justification::topLeft);
   for (auto *label : {&title, &description, &status, &emptyState})
     addAndMakeVisible(label);
+  for (auto *label : {&homeInput, &homeOutput, &homeVoice, &homeIntegration}) {
+    moduleLabel(*label, 13, theme::text, true);
+    label->setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(label);
+  }
   for (auto *button : {&primary, &secondary, &tertiary})
     addAndMakeVisible(button);
   addAndMakeVisible(presetList);
@@ -33,11 +38,18 @@ ModulePage::ModulePage(Kind pageKind, AudioEngine &audio,
   soundProgress.setEnabled(false);
   soundProgress.setRange(0.0, 1.0);
   addAndMakeVisible(soundProgress);
-  for (auto *slider : {&hp, &lp}) {
+  for (auto *slider : {&hp, &lp, &bass, &mid, &treble}) {
     slider->setSliderStyle(juce::Slider::LinearHorizontal);
     slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 75, 24);
     addAndMakeVisible(slider);
   }
+  for (auto *slider : {&homeInputGain, &homeOutputGain, &homeMix, &homeNoise}) {
+    slider->setSliderStyle(juce::Slider::LinearHorizontal);
+    slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 24);
+    addAndMakeVisible(slider);
+  }
+  addAndMakeVisible(homeInputMeter);
+  addAndMakeVisible(homeOutputMeter);
   cardViewport.setViewedComponent(&cardCanvas, false);
   cardViewport.setScrollBarsShown(true, false);
   addAndMakeVisible(cardViewport);
@@ -63,6 +75,23 @@ void ModulePage::setup() {
     tertiary.onClick = [this] {
       engine.parameters().bypass = !engine.parameters().bypass.load();
     };
+    homeInputGain.setRange(-24, 24, .1);
+    homeOutputGain.setRange(-24, 24, .1);
+    homeMix.setRange(0, 100, 1);
+    homeNoise.setRange(0, 100, 1);
+    homeInputGain.setTextValueSuffix(" dB");
+    homeOutputGain.setTextValueSuffix(" dB");
+    homeMix.setTextValueSuffix(" %");
+    homeNoise.setTextValueSuffix(" %");
+    homeInputGain.setValue(engine.parameters().inputGainDb.load(), juce::dontSendNotification);
+    homeOutputGain.setValue(engine.parameters().outputGainDb.load(), juce::dontSendNotification);
+    homeMix.setValue(engine.parameters().mix.load() * 100.0, juce::dontSendNotification);
+    homeNoise.setValue(engine.parameters().noiseReduction.load() * 100.0, juce::dontSendNotification);
+    homeInputGain.onValueChange = [this] { engine.parameters().inputGainDb = (float)homeInputGain.getValue(); };
+    homeOutputGain.onValueChange = [this] { engine.parameters().outputGainDb = (float)homeOutputGain.getValue(); };
+    homeMix.onValueChange = [this] { engine.parameters().mix = (float)homeMix.getValue() / 100.0f; };
+    homeNoise.onValueChange = [this] { engine.parameters().noiseReduction = (float)homeNoise.getValue() / 100.0f; };
+    refreshHomeFavorites();
     break;
   case Kind::Effects:
     title.setText("Biblioteca de Efeitos", juce::dontSendNotification);
@@ -114,6 +143,7 @@ void ModulePage::setup() {
             importedSounds.add(file);
             soundList.addItem(file.getFileName(), importedSounds.size());
             soundList.setSelectedId(importedSounds.size());
+            rebuildSoundPads();
           });
     };
     secondary.onClick = [this] {
@@ -125,6 +155,7 @@ void ModulePage::setup() {
       for (int i = 0; i < importedSounds.size(); ++i)
         soundList.addItem(importedSounds[i].getFileName(), i + 1);
       selectedSound = {};
+      rebuildSoundPads();
       secondary.setEnabled(false);
       tertiary.setEnabled(false);
       emptyState.setText(importedSounds.isEmpty()
@@ -139,6 +170,7 @@ void ModulePage::setup() {
     };
     emptyState.setText("Nenhum som importado. Clique em + Importar som para começar.",
                        juce::dontSendNotification);
+    rebuildSoundPads();
     break;
   case Kind::Favorites:
     title.setText("Favoritos", juce::dontSendNotification);
@@ -158,8 +190,19 @@ void ModulePage::setup() {
     tertiary.setVisible(false);
     hp.setRange(20, 2000, 1);
     lp.setRange(2000, 20000, 10);
+    bass.setRange(-12, 12, .1);
+    mid.setRange(-12, 12, .1);
+    treble.setRange(-12, 12, .1);
+    hp.setTextValueSuffix(" Hz");
+    lp.setTextValueSuffix(" Hz");
+    bass.setTextValueSuffix(" dB");
+    mid.setTextValueSuffix(" dB");
+    treble.setTextValueSuffix(" dB");
     hp.setValue(engine.parameters().hpFreq.load(), juce::dontSendNotification);
     lp.setValue(engine.parameters().lpFreq.load(), juce::dontSendNotification);
+    bass.setValue(engine.parameters().bassDb.load(), juce::dontSendNotification);
+    mid.setValue(engine.parameters().midDb.load(), juce::dontSendNotification);
+    treble.setValue(engine.parameters().trebleDb.load(), juce::dontSendNotification);
     hp.onValueChange = [this] {
       engine.parameters().hpFreq = static_cast<float>(hp.getValue());
       repaint();
@@ -168,8 +211,11 @@ void ModulePage::setup() {
       engine.parameters().lpFreq = static_cast<float>(lp.getValue());
       repaint();
     };
-    primary.onClick = [this] { hp.setValue(70); lp.setValue(18000); };
-    emptyState.setText("Passa-altas                                      Passa-baixas",
+    bass.onValueChange = [this] { engine.parameters().bassDb = (float)bass.getValue(); repaint(); };
+    mid.onValueChange = [this] { engine.parameters().midDb = (float)mid.getValue(); repaint(); };
+    treble.onValueChange = [this] { engine.parameters().trebleDb = (float)treble.getValue(); repaint(); };
+    primary.onClick = [this] { hp.setValue(70); lp.setValue(18000); bass.setValue(0); mid.setValue(0); treble.setValue(0); };
+    emptyState.setText("Filtros de corte e equalização tonal em dB",
                        juce::dontSendNotification);
     break;
   case Kind::Presets:
@@ -181,15 +227,25 @@ void ModulePage::setup() {
     tertiary.setVisible(false);
     primary.onClick = [this] {
       if (presetList.getSelectedId() <= 0) return;
-      presets.load(presetList.getText(), engine.parameters());
-      status.setText("Preset aplicado: " + presetList.getText(),
+      const auto name = presetList.getText();
+      const bool ok = presets.load(name, engine.parameters());
+      if (ok) settings.setPreference("activePreset", name);
+      status.setText(ok ? "Preset aplicado: " + name
+                        : "Falha ao carregar o preset: " + name,
                      juce::dontSendNotification);
+      status.setColour(juce::Label::textColourId,
+                       ok ? theme::green : theme::red);
     };
     secondary.onClick = [this] {
       auto name = presetList.getText().isNotEmpty()
                       ? presetList.getText() + " - cópia"
                       : "Meu preset";
-      presets.save(name, engine.parameters());
+      if (!presets.save(name, engine.parameters())) {
+        status.setText("Não foi possível salvar o preset.",
+                       juce::dontSendNotification);
+        status.setColour(juce::Label::textColourId, theme::red);
+        return;
+      }
       presetList.clear();
       presetList.addItemList(presets.names(), 1);
       status.setText("Preset salvo: " + name, juce::dontSendNotification);
@@ -233,8 +289,10 @@ void ModulePage::rebuildFavorites() {
         new VoiceCardComponent(name, presets.categoryFor(name), cards.size()));
     card->setFavourite(true);
     card->onClick = [this, name] {
-      presets.load(name, engine.parameters());
-      if (notify) notify("Favorito aplicado: " + name);
+      if (presets.load(name, engine.parameters())) {
+        settings.setPreference("activePreset", name);
+        if (notify) notify("Favorito aplicado: " + name);
+      } else if (notify) notify("Não foi possível carregar o favorito");
     };
     card->onFavourite = [this, name](bool enabled) {
       settings.setFavourite(name, enabled);
@@ -250,6 +308,34 @@ void ModulePage::rebuildFavorites() {
   repaint();
 }
 
+void ModulePage::refreshHomeFavorites() {
+  if (kind != Kind::Home) return;
+  const auto favourites = settings.favourites();
+  const auto signature = favourites.joinIntoString("\n");
+  if (signature == homeFavouriteSignature && homeFavorites.size() > 0) return;
+  homeFavouriteSignature = signature;
+  homeFavorites.clear();
+  const int count = juce::jmin(4, favourites.size());
+  for (int i = 0; i < count; ++i) {
+    const auto name = favourites[i];
+    auto *button = homeFavorites.add(new juce::TextButton("★  " + name));
+    button->setColour(juce::TextButton::buttonColourId, theme::elevated);
+    button->onClick = [this, name] {
+      if (presets.load(name, engine.parameters())) {
+        settings.setPreference("activePreset", name);
+        if (notify) notify("Favorito aplicado: " + name);
+      } else if (notify) notify("Não foi possível carregar o favorito");
+    };
+    addAndMakeVisible(button);
+  }
+  if (homeFavorites.isEmpty()) {
+    auto *button = homeFavorites.add(new juce::TextButton("Adicionar favoritos na biblioteca"));
+    button->onClick = [this] { if (navigate) navigate(PageId::Voices); };
+    addAndMakeVisible(button);
+  }
+  resized();
+}
+
 void ModulePage::selectSound(int index) {
   if (!juce::isPositiveAndBelow(index, importedSounds.size())) return;
   selectedSound = importedSounds[index];
@@ -263,6 +349,25 @@ void ModulePage::selectSound(int index) {
   emptyState.setText("Arquivo selecionado: " + selectedSound.getFileName(),
                      juce::dontSendNotification);
   status.setText("Pronto para reproduzir.", juce::dontSendNotification);
+}
+
+void ModulePage::rebuildSoundPads() {
+  if (kind != Kind::Soundboard) return;
+  soundPads.clear();
+  for (int i = 0; i < importedSounds.size(); ++i) {
+    auto *button = soundPads.add(
+        new juce::TextButton("▶  " + importedSounds[i].getFileNameWithoutExtension()));
+    button->setColour(juce::TextButton::buttonColourId, theme::elevated);
+    button->setTooltip("Carregar e reproduzir " + importedSounds[i].getFileName());
+    button->onClick = [this, i] {
+      selectSound(i);
+      if (!selectedSound.existsAsFile() || !tertiary.isEnabled()) return;
+      soundList.setSelectedId(i + 1, juce::dontSendNotification);
+      engine.playSoundboard();
+    };
+    addAndMakeVisible(button);
+  }
+  resized();
 }
 
 void ModulePage::timerCallback() {
@@ -289,28 +394,84 @@ void ModulePage::timerCallback() {
       hp.setValue(engine.parameters().hpFreq.load(), juce::dontSendNotification);
     if (std::abs(lp.getValue() - engine.parameters().lpFreq.load()) > 0.5)
       lp.setValue(engine.parameters().lpFreq.load(), juce::dontSendNotification);
+    if (std::abs(bass.getValue() - engine.parameters().bassDb.load()) > .05)
+      bass.setValue(engine.parameters().bassDb.load(), juce::dontSendNotification);
+    if (std::abs(mid.getValue() - engine.parameters().midDb.load()) > .05)
+      mid.setValue(engine.parameters().midDb.load(), juce::dontSendNotification);
+    if (std::abs(treble.getValue() - engine.parameters().trebleDb.load()) > .05)
+      treble.setValue(engine.parameters().trebleDb.load(), juce::dontSendNotification);
     repaint();
     return;
   }
   if (kind != Kind::Home) return;
-  auto *device = engine.deviceManager().getCurrentAudioDevice();
-  juce::String text = "Processamento: " +
-      juce::String(engine.isRunning() ? "ATIVO" : "DESLIGADO") + "\n";
-  text += "Dispositivo: " + (device ? device->getName() : "Não disponível") + "\n";
-  if (device)
-    text += "Sample rate: " + juce::String(device->getCurrentSampleRate(), 0) +
-            " Hz   Buffer: " + juce::String(device->getCurrentBufferSizeSamples()) + "\n";
-  text += "CPU DSP: " + juce::String(engine.cpuUsage() * 100, 1) +
-          "%   Underruns: " + juce::String((juce::int64)engine.underruns());
-  status.setText(text, juce::dontSendNotification);
+  const auto setup = engine.deviceManager().getAudioDeviceSetup();
+  homeInput.setText("ENTRADA\n" + (setup.inputDeviceName.isNotEmpty()
+      ? setup.inputDeviceName : "Microfone não encontrado"), juce::dontSendNotification);
+  homeOutput.setText("SAÍDA\n" + (setup.outputDeviceName.isNotEmpty()
+      ? setup.outputDeviceName : "Saída não encontrada"), juce::dontSendNotification);
+  homeInputMeter.setLevels(engine.processor().inputPeak(), engine.processor().inputPeak());
+  homeOutputMeter.setLevels(engine.processor().outputPeak(), engine.processor().outputPeak());
+  status.setText(engine.isRunning()
+      ? "● PROCESSAMENTO ATIVO  ·  CPU " + juce::String(engine.cpuUsage() * 100, 1) +
+            "%  ·  " + juce::String((juce::int64)engine.underruns()) + " underruns"
+      : "○ PROCESSAMENTO DESLIGADO  ·  clique em Ativar no rodapé",
+      juce::dontSendNotification);
+  status.setColour(juce::Label::textColourId,
+                   engine.isRunning() ? theme::green : theme::muted);
+  if (++homeRefreshCounter >= 20) {
+    homeRefreshCounter = 0;
+    homeVoice.setText(
+        "VOZ ATIVA\n" +
+            settings.preference("activePreset", "Voz normal limpa"),
+        juce::dontSendNotification);
+    const bool virtualRoute =
+        VirtualDeviceDetector::isVirtual(setup.outputDeviceName);
+    const bool voiceAppOpen = ApplicationDetector::isTargetRunning("Discord") ||
+                              ApplicationDetector::isTargetRunning("FiveM") ||
+                              ApplicationDetector::isTargetRunning("OBS");
+    homeIntegration.setText(
+        virtualRoute ? "ROTEAMENTO\nSaída virtual configurada"
+        : voiceAppOpen ? "INTEGRAÇÕES\nAplicativo aberto · falta saída virtual"
+                       : "INTEGRAÇÕES\nNenhum aplicativo detectado",
+        juce::dontSendNotification);
+    homeIntegration.setColour(
+        juce::Label::textColourId,
+        virtualRoute ? theme::green
+                     : voiceAppOpen ? theme::yellow : theme::muted);
+    refreshHomeFavorites();
+  }
 }
 
 void ModulePage::paint(juce::Graphics &g) {
-  g.fillAll(theme::background);
+  theme::paintBackground(g, getLocalBounds());
   for (auto panel : panels)
     theme::roundedPanel(g, panel.toFloat(), 12, theme::panel);
-  if (kind != Kind::Equalizer || panels.isEmpty()) return;
-  auto graph = panels[0].toFloat().reduced(30, 145);
+  if (kind == Kind::Home) {
+    g.setColour(theme::text);
+    g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
+    g.drawText("Controle rápido", homeControlsArea.reduced(18).removeFromTop(24),
+               juce::Justification::centredLeft);
+    g.drawText("Vozes favoritas", homeFavoritesArea.reduced(18).removeFromTop(24),
+               juce::Justification::centredLeft);
+    const juce::Slider *controls[]{&homeInputGain, &homeOutputGain, &homeMix, &homeNoise};
+    const char *names[]{"Ganho de entrada", "Volume de saída", "Intensidade", "Redução de ruído"};
+    g.setColour(theme::muted);
+    g.setFont(12.0f);
+    for (int i = 0; i < 4; ++i)
+      g.drawText(juce::String::fromUTF8(names[i]), controls[i]->getBounds().withWidth(124),
+                 juce::Justification::centredLeft);
+    return;
+  }
+  if (kind != Kind::Equalizer || equalizerGraphArea.isEmpty()) return;
+  const juce::Slider *toneControls[]{&hp, &lp, &bass, &mid, &treble};
+  const char *toneNames[]{"Passa-altas", "Passa-baixas", "Graves", "Médios", "Agudos"};
+  g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+  g.setColour(theme::muted);
+  for (int i = 0; i < 5; ++i)
+    g.drawText(juce::String::fromUTF8(toneNames[i]),
+               toneControls[i]->getBounds().withWidth(104),
+               juce::Justification::centredLeft);
+  auto graph = equalizerGraphArea.toFloat();
   if (graph.getHeight() < 60) return;
   g.setColour(theme::border);
   for (int i = 0; i <= 8; ++i)
@@ -329,9 +490,15 @@ void ModulePage::paint(juce::Graphics &g) {
     const double lpRatio = frequency / juce::jmax(20.0, lpFreq);
     const double hpMagnitude = hpRatio / std::sqrt(1.0 + hpRatio * hpRatio);
     const double lpMagnitude = 1.0 / std::sqrt(1.0 + lpRatio * lpRatio);
-    const double db = juce::jlimit(-36.0, 3.0,
-        juce::Decibels::gainToDecibels(hpMagnitude * lpMagnitude, -60.0));
-    const float y = juce::jmap((float)db, -36.0f, 3.0f,
+    const double lowWeight = 1.0 / (1.0 + std::pow(frequency / 250.0, 4.0));
+    const double highWeight = 1.0 / (1.0 + std::pow(4000.0 / frequency, 4.0));
+    const double midWeight = juce::jmax(0.0, 1.0 - lowWeight - highWeight);
+    const double toneDb = lowWeight * engine.parameters().bassDb.load() +
+                          midWeight * engine.parameters().midDb.load() +
+                          highWeight * engine.parameters().trebleDb.load();
+    const double db = juce::jlimit(-36.0, 12.0,
+        juce::Decibels::gainToDecibels(hpMagnitude * lpMagnitude, -60.0) + toneDb);
+    const float y = juce::jmap((float)db, -36.0f, 12.0f,
                                graph.getBottom(), graph.getY());
     if (x == 0) response.startNewSubPath(graph.getX(), y);
     else response.lineTo(graph.getX() + (float)x, y);
@@ -367,13 +534,51 @@ void ModulePage::resized() {
   panels.add(area);
   auto content = area.reduced(24);
   soundList.setBounds({}); soundProgress.setBounds({}); presetList.setBounds({});
-  hp.setBounds({}); lp.setBounds({}); cardViewport.setBounds({});
+  hp.setBounds({}); lp.setBounds({}); bass.setBounds({}); mid.setBounds({});
+  treble.setBounds({}); cardViewport.setBounds({});
   status.setBounds({}); emptyState.setBounds({});
+  homeInput.setBounds({}); homeOutput.setBounds({}); homeVoice.setBounds({});
+  homeIntegration.setBounds({}); homeInputGain.setBounds({});
+  homeOutputGain.setBounds({}); homeMix.setBounds({}); homeNoise.setBounds({});
+  homeInputMeter.setBounds({}); homeOutputMeter.setBounds({});
+  for (auto *button : homeFavorites) button->setBounds({});
+  for (auto *button : soundPads) button->setBounds({});
+  homeHeroArea = {}; homeStatsArea = {}; homeControlsArea = {}; homeFavoritesArea = {};
+  equalizerGraphArea = {};
   if (kind == Kind::Home) {
-    status.setBounds(content.removeFromTop(150));
-    emptyState.setText("Ações rápidas usam dados reais do AudioEngine.",
-                       juce::dontSendNotification);
-    emptyState.setBounds(content.removeFromTop(50));
+    panels.clear();
+    homeHeroArea = content.removeFromTop(82);
+    panels.add(homeHeroArea);
+    auto hero = homeHeroArea.reduced(18, 12);
+    status.setBounds(hero.removeFromTop(26));
+    homeInputMeter.setBounds(hero.removeFromTop(22));
+    hero.removeFromTop(5);
+    homeOutputMeter.setBounds(hero.removeFromTop(22));
+    content.removeFromTop(12);
+    homeStatsArea = content.removeFromTop(98);
+    panels.add(homeStatsArea);
+    auto stats = homeStatsArea.reduced(12);
+    juce::Label *statLabels[]{&homeInput, &homeOutput, &homeVoice, &homeIntegration};
+    for (int i = 0; i < 4; ++i)
+      statLabels[i]->setBounds(
+          stats.removeFromLeft(stats.getWidth() / (4 - i)).reduced(6));
+    content.removeFromTop(12);
+    homeControlsArea = content.removeFromLeft(content.getWidth() / 2 - 6);
+    content.removeFromLeft(12);
+    homeFavoritesArea = content;
+    panels.add(homeControlsArea); panels.add(homeFavoritesArea);
+    auto controls = homeControlsArea.reduced(18);
+    controls.removeFromTop(34);
+    auto place = [&controls](juce::Slider &slider) {
+      auto row = controls.removeFromTop(40);
+      slider.setBounds(row.withTrimmedLeft(128));
+      controls.removeFromTop(4);
+    };
+    place(homeInputGain); place(homeOutputGain); place(homeMix); place(homeNoise);
+    auto favourites = homeFavoritesArea.reduced(18);
+    favourites.removeFromTop(34);
+    for (auto *button : homeFavorites)
+      button->setBounds(favourites.removeFromTop(40).reduced(0, 3));
   } else if (kind == Kind::Effects || kind == Kind::Favorites) {
     emptyState.setBounds(content.removeFromTop(kind == Kind::Favorites ? 45 : 0));
     cardViewport.setBounds(content);
@@ -384,10 +589,33 @@ void ModulePage::resized() {
     emptyState.setBounds(content.removeFromTop(65));
     status.setBounds(content.removeFromTop(36));
     soundProgress.setBounds(content.removeFromTop(28));
+    content.removeFromTop(8);
+    const int columns = juce::jlimit(1, 4, juce::jmax(1, content.getWidth() / 210));
+    const int gap = 8;
+    const int padWidth = (content.getWidth() - gap * (columns - 1)) / columns;
+    int column = 0;
+    auto row = content.removeFromTop(44);
+    for (auto *button : soundPads) {
+      if (column == columns) {
+        column = 0;
+        content.removeFromTop(gap);
+        row = content.removeFromTop(44);
+      }
+      button->setBounds(row.removeFromLeft(padWidth));
+      if (++column < columns) row.removeFromLeft(gap);
+    }
   } else if (kind == Kind::Equalizer) {
     emptyState.setBounds(content.removeFromTop(35));
-    hp.setBounds(content.removeFromTop(48));
-    lp.setBounds(content.removeFromTop(48));
+    auto controls = content.removeFromLeft(juce::jmin(390, content.getWidth() / 2));
+    content.removeFromLeft(22);
+    equalizerGraphArea = content.reduced(8, 10);
+    auto placeTone = [&controls](juce::Slider &slider, int height) {
+      auto row = controls.removeFromTop(height);
+      slider.setBounds(row.withTrimmedLeft(108));
+      controls.removeFromTop(5);
+    };
+    placeTone(hp, 42); placeTone(lp, 42); placeTone(bass, 42);
+    placeTone(mid, 42); placeTone(treble, 42);
   } else if (kind == Kind::Presets) {
     presetList.setBounds(content.removeFromTop(42));
     status.setBounds(content.removeFromTop(60));

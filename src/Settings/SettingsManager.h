@@ -13,7 +13,9 @@ public:
   bool setFavourite(const juce::String &, bool) const;
   juce::String preference(const juce::String &,
                           const juce::String &fallback = {}) const;
+  juce::StringPairArray preferences() const;
   bool setPreference(const juce::String &, const juce::String &) const;
+  bool setPreferences(const juce::StringPairArray &) const;
   static juce::var parametersToJson(const Parameters &);
   static bool jsonToParameters(const juce::var &, Parameters &);
 

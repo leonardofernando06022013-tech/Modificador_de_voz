@@ -343,7 +343,7 @@ void AdminPage::record(const juce::String &action, const juce::String &target,
 
 // ─────────────────────────────────────────────────────────────────────────────
 void AdminPage::paint(juce::Graphics &g) {
-    g.fillAll(theme::background);
+    theme::paintBackground(g, getLocalBounds());
 
     // Linha separadora abaixo das abas
     if (!tabsArea.isEmpty()) {
@@ -426,17 +426,17 @@ void AdminPage::resized() {
 // ─────────────────────────────────────────────────────────────────────────────
 bool AdminPage::runSmokeTest() {
     // 1. Verificar que usuário comum não tem acesso
-    AdminSessionManager testSession;
+    AdminAccessController testAccess;
     UserAccount common;
     common.id     = "test-id";
     common.name   = "Test";
     common.role   = Role::User;
     common.status = UserStatus::Active;
-    if (testSession.begin() && testSession.can(Permission::ViewLogs))
+    if (testAccess.begin(common) || testAccess.can(Permission::ViewLogs))
         return false; // Usuário comum não pode ter ViewLogs via begin()
 
     // 2. Smoke de redimensionamento nas resoluções-alvo
-    const juce::Point<int> sizes[]{ {1100,700},{1280,720},{1440,900},{1920,1080} };
+    const juce::Point<int> sizes[]{ {1024,768},{1100,700},{1280,720},{1440,900},{1920,1080} };
     for (auto sz : sizes) {
         setBounds(0, 0, sz.x, sz.y);
         resized();

@@ -1,6 +1,7 @@
 #pragma once
 #include "Audio/AudioRoutingManager.h"
 #include "Integrations/IntegrationProfileManager.h"
+#include "Integrations/ApplicationDetector.h"
 #include "Integrations/RoutingDiagnostics.h"
 #include "Integrations/VirtualDeviceDetector.h"
 #include "UI/ModernComponents.h"
@@ -31,7 +32,7 @@ private:
   AudioRoutingManager routing;
   IntegrationProfileManager profileManager;
   juce::Array<DetectedAudioDevice> detected;
-  juce::Label title, subtitle, virtualWarning, diagnosticTitle,
+  juce::Label title, subtitle, applicationStatus, virtualWarning, diagnosticTitle,
       diagnosticDetails, inputMeterLabel, outputMeterLabel;
   juce::OwnedArray<juce::TextButton> targets;
   juce::ComboBox inputBox, outputBox, profileBox, sampleRateBox, bufferBox;

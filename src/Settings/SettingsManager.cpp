@@ -23,6 +23,9 @@ juce::var SettingsManager::parametersToJson(const Parameters &p) {
   P(hpFreq);
   P(lpFreq);
   P(noiseReduction);
+  P(bassDb);
+  P(midDb);
+  P(trebleDb);
   P(distortion);
   P(chorus);
   P(flanger);
@@ -63,6 +66,9 @@ bool SettingsManager::jsonToParameters(const juce::var &v, Parameters &p) {
   F(hpFreq, 20, 2000);
   F(lpFreq, 2000, 20000);
   F(noiseReduction, 0, 1);
+  F(bassDb, -12, 12);
+  F(midDb, -12, 12);
+  F(trebleDb, -12, 12);
   F(distortion, 0, 1);
   F(chorus, 0, 1);
   F(flanger, 0, 1);
@@ -135,17 +141,30 @@ bool SettingsManager::setFavourite(const juce::String &name,
 }
 juce::String SettingsManager::preference(const juce::String &key,
                                          const juce::String &fallback) const {
+  return preferences().getValue(key, fallback);
+}
+juce::StringPairArray SettingsManager::preferences() const {
+  juce::StringPairArray result;
   auto file = settingsFile.getSiblingFile("preferences.json");
   if (!file.existsAsFile())
-    return fallback;
+    return result;
   auto value = juce::JSON::parse(file);
-  if (auto *object = value.getDynamicObject())
-    if (object->hasProperty(key))
-      return object->getProperty(key).toString();
-  return fallback;
+  if (auto *object = value.getDynamicObject()) {
+    const auto &properties = object->getProperties();
+    for (int i = 0; i < properties.size(); ++i)
+      result.set(properties.getName(i).toString(),
+                 properties.getValueAt(i).toString());
+  }
+  return result;
 }
 bool SettingsManager::setPreference(const juce::String &key,
                                     const juce::String &value) const {
+  juce::StringPairArray values;
+  values.set(key, value);
+  return setPreferences(values);
+}
+bool SettingsManager::setPreferences(
+    const juce::StringPairArray &values) const {
   auto file = settingsFile.getSiblingFile("preferences.json");
   auto parsed = file.existsAsFile() ? juce::JSON::parse(file) : juce::var{};
   auto *object = parsed.getDynamicObject();
@@ -153,7 +172,8 @@ bool SettingsManager::setPreference(const juce::String &key,
     object = new juce::DynamicObject();
     parsed = juce::var(object);
   }
-  object->setProperty(key, value);
+  for (const auto &key : values.getAllKeys())
+    object->setProperty(key, values[key]);
   juce::TemporaryFile temporary(file);
   if (!temporary.getFile().replaceWithText(juce::JSON::toString(parsed, true)))
     return false;

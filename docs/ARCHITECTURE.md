@@ -1,19 +1,78 @@
 # Arquitetura e decisões
 
-O aplicativo usa uma única callback duplex de `AudioDeviceManager`, evitando uma fila entre entrada e saída quando o driver fornece ambos no mesmo dispositivo lógico. A área de trabalho e os buffers dry/wet são dimensionados em `audioDeviceAboutToStart`. Parâmetros são `std::atomic`; ganhos e mistura usam rampas de 20 ms. `ScopedNoDenormals` evita penalidade de números denormais.
+O BlackVoice é um aplicativo desktop Windows escrito em C++20, JUCE 8.0.13 e CMake. O processamento é local: o executável não grava áudio, não envia áudio à internet e não instala drivers.
 
-A UI nunca toca no buffer. Ela publica parâmetros e lê picos/CPU atômicos em 20 Hz. JSON e caixas de diálogo ficam na message thread. Presets são aplicados por várias escritas atômicas; isso é seguro, embora não seja uma troca transacional de todos os parâmetros no mesmo sample.
+## Áudio em tempo real
 
-O custo é O(canais × amostras), com buffers fixos e sem GPU. Pitch granular usa uma linha mono compartilhada, escolha deliberada para entrada de microfone e estabilidade de fase nas saídas estéreo.
+`AudioEngine` mantém uma única callback duplex do `AudioDeviceManager`. Os buffers de trabalho, monitoramento e soundboard são dimensionados em `audioDeviceAboutToStart`; a callback reutiliza esses buffers e não acessa GUI, JSON, logs ou disco.
 
-## Arquitetura visual
+`VoiceProcessor` usa parâmetros `std::atomic`, rampas para ganho/mistura e `ScopedNoDenormals`. O fluxo atual é:
 
-A interface usa `AppLookAndFeel` e a paleta centralizada em `Theme.h`. `SidebarComponent`, `VoiceCardComponent`, `AudioLevelMeter` e `NotificationComponent` são componentes reutilizáveis sem acesso direto à callback. `MainComponent` organiza barra superior, navegação, banner, filtros, grade rolável, painel de parâmetros e barra inferior. Cards publicam presets no `PresetManager`; sliders escrevem apenas em parâmetros atômicos; medidores, CPU, latência e diagnóstico são consultados por timer a 30 Hz.
+`entrada → ganho → HP/LP + redução de ruído → EQ tonal de 3 bandas → gate → compressor → pitch/formante → efeitos → dry/wet → limitador/DC block → saída`
 
-Avatares e ondas são desenhados por `juce::Graphics`, evitando imagens externas, marcas de terceiros e carregamento repetido de recursos. O layout recalcula colunas conforme a largura e recolhe o painel direito abaixo de 1250 px.
+Os efeitos implementados são distorção, ring modulation, bit crusher, flanger, chorus, delay e reverb. O custo por bloco é linear em canais × amostras. A UI lê apenas picos, CPU e underruns atômicos.
 
-## Navegação por páginas
+O soundboard usa `AudioTransportSource` com read-ahead de 32.768 amostras e uma `TimeSliceThread` dedicada. Os pads da UI apenas selecionam/carregam o arquivo na message thread e acionam o transporte; a leitura de disco não ocorre diretamente na callback.
 
-`PageRouter` mantém página atual/anterior, ignora navegação duplicada e publica uma única transição. As dez rotas têm componentes persistentes: Início, Vozes, Efeitos, Painel de Som, Favoritos, Equalizador, Dispositivos, Presets, Diagnóstico e Configurações. `SettingsPage` fica em arquivo próprio e usa viewport com cartões, debounce de 550 ms para salvar parâmetros, backup antes da importação e controles reais de dispositivo.
+O monitoramento usa outro `AudioDeviceManager` e um ring buffer pré-alocado. A opção deve ser usada com fones para evitar feedback.
 
-O executável aceita `--ui-smoke-test`: percorre todas as rotas na message thread e encerra. Isso permite testar navegação sem depender de coordenadas ou de overlays de outros aplicativos.
+## Shell e navegação
+
+`MainComponent` é o shell: sidebar, topbar, notificações e barra inferior. Ele não constrói cards de voz nem conteúdo específico de módulos. `PageRouter` controla a página atual/anterior e delega para componentes persistentes:
+
+- Início (`ModulePage::Home`)
+- Vozes (`VoicesPage`)
+- Efeitos, Soundboard, Favoritos, Equalizador e Presets (`ModulePage`)
+- Dispositivos (seletor nativo do JUCE)
+- Integrações (`IntegrationsPage`)
+- Diagnóstico
+- Configurações (`SettingsPage`)
+- Administração (`AdminPage`)
+
+O layout suporta 1024×768 até 2200×1400. A sidebar entra em modo compacto, a grade recalcula colunas, as páginas longas usam viewport e as áreas de detalhes mantêm dimensões estáveis durante a troca de acordeões.
+
+## Biblioteca de vozes
+
+`PresetManager` fornece 12 presets-base, 1.000 variações determinísticas e presets JSON do usuário. `VoicesPage` é a única responsável por busca, filtros, favoritos, cards, painel de detalhes e criação/exclusão de vozes personalizadas.
+
+Para evitar mais de mil componentes simultâneos, apenas 72 cards são materializados por página. “Mostrar mais” amplia o limite sob demanda. Os presets de fábrica são calculados quando selecionados; não há arquivos redundantes para cada variação.
+
+As transformações são multilíngues porque trabalham sobre o sinal e não reconhecem texto. A UI identifica isso explicitamente, em vez de atribuir idiomas fictícios.
+
+## Tema e acessibilidade
+
+`Theme.h` centraliza cores, raios, espaçamentos, fundo, painéis e preferências globais. `AppLookAndFeel` desenha estados normal, hover, pressionado, desabilitado, foco, sucesso e perigo.
+
+Alto contraste, foco visível, áreas de clique maiores, redução de animações, modo compacto, frequência dos medidores e tooltips são aplicados de verdade. Opções sem backend — bandeja, atualização automática e qualidade adaptativa — ficam desabilitadas com uma explicação.
+
+## Persistência
+
+`SettingsManager` usa JSON e gravações atômicas por `TemporaryFile`. Preferências são carregadas em lote e alterações da página de configurações são persistidas em uma única escrita, evitando dezenas de leituras/gravações por clique. Parâmetros de áudio são limitados a faixas seguras ao importar JSON inválido ou extremo.
+
+Favoritos, preferências, dispositivo, monitoramento e presets têm arquivos separados. I/O ocorre somente fora da callback.
+
+## Integrações
+
+`IntegrationsPage` configura endpoints normais do Windows. Um cabo virtual externo, como VB-CABLE ou VoiceMeeter, continua necessário para expor a saída processada como microfone em Discord, FiveM, OBS, jogos ou chamadas.
+
+`ApplicationDetector` verifica apenas se processos conhecidos estão abertos. Esse sinal nunca é apresentado como prova de que o roteamento funciona. O teste de integração valida dispositivos, estado do engine e rota local; a seleção final do microfone no aplicativo de destino continua sendo responsabilidade do usuário.
+
+## Administração e segurança
+
+O painel administrativo é local. Na primeira execução sem armazenamento, `UserManager` cria o proprietário associado ao login atual do Windows. Depois disso, uma identidade desconhecida é negada; ela não é promovida automaticamente.
+
+`AdminAccessController` aplica permissões por função. Um administrador não pode conceder função acima da própria, alterar/bloquear/remover um superadministrador nem mudar a própria função/status. Exclusões, bloqueios e limpeza de dados exigem confirmação.
+
+Essa camada não substitui autenticação remota, banco de dados, criptografia de servidor ou trilha de auditoria corporativa.
+
+## Verificação
+
+`BlackVoiceTests` cobre DSP, limites e JSON, presets, roteador, detectores e autorização administrativa. O argumento `--ui-smoke-test` percorre todas as rotas e testa layouts-alvo, incluindo 1024×768, na message thread.
+
+Comandos de referência:
+
+```powershell
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
+.\build\BlackVoice_artefacts\Release\BlackVoice.exe --ui-smoke-test
+```

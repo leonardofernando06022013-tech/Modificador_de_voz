@@ -32,6 +32,8 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   viewport.setScrollBarsShown(true, false);
   addAndMakeVisible(viewport);
   setupCombo(themeBox, {"Escuro"}, 1);
+  themeBox.setEnabled(false);
+  themeBox.setTooltip("O tema escuro é o tema disponível nesta versão.");
   setupCombo(language, localization.languageNames(),
              localization.languageCodes().indexOf(localization.currentLanguage()) + 1);
   settingsLabel(languageTitle,13,theme::text,true);
@@ -40,55 +42,81 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   language.setTooltip("Interface language / Idioma da interface");
   canvas.addAndMakeVisible(languageTitle);
   canvas.addAndMakeVisible(languageDescription);
-  setupCombo(fontSize, {"Pequeno", "Medio", "Grande"}, 2);
-  setupCombo(scale, {"100%", "125%", "150%", "175%", "200%"}, 1);
+  setupCombo(fontSize, {"Medio (padrao do sistema)"}, 1);
+  setupCombo(scale, {"100% (escala do sistema)"}, 1);
+  fontSize.setEnabled(false);
+  scale.setEnabled(false);
+  fontSize.setTooltip("O aplicativo respeita a fonte definida pelo sistema.");
+  scale.setTooltip("A escala e controlada pelas configuracoes de tela do Windows.");
   setupCombo(quality, {"Baixa (44 kHz)", "Alta (48 kHz)"}, 2);
   setupCombo(buffer,
              {"128 amostras", "256 amostras", "512 amostras", "1024 amostras"},
              2);
   setupCombo(sampleRate, {"44100 Hz", "48000 Hz"}, 2);
-  setupCombo(audioMode, {"WASAPI compartilhado"}, 1);
-  setupCombo(channels, {"Mono para estereo", "Estereo"}, 1);
+  setupCombo(audioMode, {"Driver selecionado em Dispositivos"}, 1);
+  setupCombo(channels, {"Mono para estereo"}, 1);
+  audioMode.setEnabled(false);
+  channels.setEnabled(false);
   setupCombo(processPriority, {"Normal", "Alta"}, 2);
   setupCombo(meterRate, {"20 Hz", "30 Hz", "60 Hz"}, 2);
-  setupCombo(logLevel, {"Erros", "Normal", "Detalhado"}, 2);
-  setupCombo(updateChannel, {"Estavel"}, 1);
+  setupCombo(logLevel, {"Normal (local)"}, 1);
+  setupCombo(updateChannel, {"Sem servidor configurado"}, 1);
+  logLevel.setEnabled(false);
+  updateChannel.setEnabled(false);
   setupToggle(compact, "Modo compacto", false);
   setupToggle(reduceAnimations, "Reduzir animacoes", false);
   setupToggle(showTips, "Mostrar dicas", true);
-  setupToggle(autoContext, "Painel direito automatico", true);
-  setupToggle(monitorInput, "Monitoramento", true);
+  setupToggle(autoContext, "Painel direito automatico", false);
+  autoContext.setEnabled(false);
+  autoContext.setTooltip("Nao ha painel contextual nesta versao.");
+  setupToggle(monitorInput, "Restaurar monitoramento ao iniciar", false);
   setupToggle(safetyLimiter, "Limitador de seguranca",
               engine.parameters().limiterEnabled.load());
   setupToggle(reconnect, "Reconexao automatica", true);
   setupToggle(syncDevices, "Sincronizar dispositivos", true);
+  syncDevices.setEnabled(false);
+  syncDevices.setTooltip("Entrada e saida sao gerenciadas na pagina Dispositivos.");
   setupToggle(startWindows, "Iniciar com Windows", false);
   setupToggle(startMinimized, "Iniciar minimizado", false);
   setupToggle(startTray, "Iniciar na bandeja", false);
+  startTray.setEnabled(false);
+  startTray.setTooltip("O modo de bandeja ainda nao esta disponivel.");
   setupToggle(restorePreset, "Restaurar ultimo preset", true);
   setupToggle(autoProcess, "Ligar processamento automaticamente", false);
   setupToggle(cpuOptimization, "Otimizacao de CPU", true);
   setupToggle(adaptiveQuality, "Qualidade adaptativa", false);
+  adaptiveQuality.setEnabled(false);
+  adaptiveQuality.setTooltip("Requer um controlador de qualidade dinamico ainda nao instalado.");
   setupToggle(economy, "Modo economia", false);
   setupToggle(highContrast, "Alto contraste", false);
   setupToggle(focusVisible, "Foco visivel", true);
   setupToggle(largeClick, "Maior area de clique", false);
   setupToggle(keyboardNav, "Navegacao por teclado", true);
+  keyboardNav.setEnabled(false);
+  keyboardNav.setTooltip("A navegação por teclado permanece sempre ativa.");
   setupToggle(saveLogs, "Salvar logs", true);
   setupToggle(telemetry, "Telemetria (sempre desativada)", false);
   telemetry.setEnabled(false);
-  setupToggle(autoUpdates, "Atualizacao automatica", false);
+  setupToggle(autoUpdates, "Atualizacao automatica (sem servidor)", false);
+  autoUpdates.setEnabled(false);
+  autoUpdates.setTooltip("Nenhum servidor de atualizacao foi configurado.");
   loadPreferences();
-  juce::ComboBox *preferenceCombos[]{&themeBox, &fontSize,
-                                     &scale,    &processPriority, &meterRate,
-                                     &logLevel};
+  for (auto *unsupported : {&autoContext, &syncDevices, &startTray,
+                            &adaptiveQuality, &autoUpdates})
+    unsupported->setToggleState(false, juce::dontSendNotification);
+  keyboardNav.setToggleState(true, juce::dontSendNotification);
+  juce::ComboBox *preferenceCombos[]{
+      &themeBox, &fontSize, &scale, &quality, &buffer, &sampleRate,
+      &audioMode, &channels, &processPriority, &meterRate, &logLevel,
+      &updateChannel};
   for (auto *c : preferenceCombos)
     c->onChange = [this] { markDirty(); };
   language.onChange=[this]{const int index=language.getSelectedItemIndex();if(index<0)return;saveStatus.setText(localization.text("settings.applying"),juce::dontSendNotification);const auto codes=localization.languageCodes();if(index<codes.size()&&localization.setLanguage(codes[index])){saveStatus.setText(localization.text("settings.applied"),juce::dontSendNotification);saveStatus.setColour(juce::Label::textColourId,theme::green);}else{saveStatus.setText(localization.text("settings.failed"),juce::dontSendNotification);saveStatus.setColour(juce::Label::textColourId,theme::red);language.setSelectedId(codes.indexOf(localization.currentLanguage())+1,juce::dontSendNotification);}};
   juce::ToggleButton *preferenceToggles[]{
-      &compact,         &reduceAnimations, &showTips,    &autoContext,
-      &cpuOptimization, &adaptiveQuality,  &economy,     &highContrast,
-      &focusVisible,    &largeClick,       &keyboardNav, &saveLogs,
+      &compact, &reduceAnimations, &showTips, &autoContext, &monitorInput,
+      &reconnect, &syncDevices, &startMinimized, &startTray, &restorePreset,
+      &autoProcess, &cpuOptimization, &adaptiveQuality, &economy,
+      &highContrast, &focusVisible, &largeClick, &keyboardNav, &saveLogs,
       &autoUpdates};
   for (auto *t : preferenceToggles)
     t->onClick = [this] { markDirty(); };
@@ -112,6 +140,24 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   };
   safetyLimiter.onClick = [this] {
     engine.parameters().limiterEnabled = safetyLimiter.getToggleState();
+    markDirty();
+  };
+  monitorInput.onClick = [this] {
+    const auto requested = monitorInput.getToggleState();
+    const bool wasRunning = engine.isRunning();
+    if (requested && !wasRunning) engine.start();
+    const auto error = engine.setMonitoring(requested);
+    if (error.isNotEmpty()) {
+      if (!wasRunning) engine.stop();
+      monitorInput.setToggleState(!requested, juce::dontSendNotification);
+      saveStatus.setText("Falha no monitoramento: " + error,
+                         juce::dontSendNotification);
+      saveStatus.setColour(juce::Label::textColourId, theme::red);
+    }
+    markDirty();
+  };
+  autoProcess.onClick = [this] {
+    if (autoProcess.getToggleState()) engine.start(); else engine.stop();
     markDirty();
   };
   startWindows.onClick = [this] {
@@ -139,6 +185,8 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   openLogs.setButtonText("Abrir logs");
   clearLogs.setButtonText("Limpar logs");
   clearCache.setButtonText("Limpar cache");
+  clearLogs.setComponentID("danger");
+  clearCache.setComponentID("danger");
   checkUpdates.setButtonText("Versao 1.0.0 - sem servidor de atualizacao");
   checkUpdates.setEnabled(false);
   backupButton.setButtonText("Criar backup local");
@@ -166,15 +214,33 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
                          juce::dontSendNotification);
   };
   openLogs.onClick = [] { AppPaths::logs().startAsProcess(); };
-  clearLogs.onClick = []() {
-    for (auto &f :
-         AppPaths::logs().findChildFiles(juce::File::findFiles, false, "*.log"))
-      f.deleteFile();
+  clearLogs.onClick = [this]() {
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon, "Limpar logs",
+        "Excluir todos os logs locais? Esta acao nao pode ser desfeita.",
+        "Excluir", "Cancelar", this,
+        juce::ModalCallbackFunction::create([this](int confirmed) {
+          if (!confirmed) return;
+          for (auto &f : AppPaths::logs().findChildFiles(
+                   juce::File::findFiles, false, "*.log"))
+            f.deleteFile();
+          saveStatus.setText("Logs locais removidos",
+                             juce::dontSendNotification);
+        }));
   };
-  clearCache.onClick = []() {
-    for (auto &f : AppPaths::cache().findChildFiles(
-             juce::File::findFilesAndDirectories, false))
-      f.deleteRecursively();
+  clearCache.onClick = [this]() {
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon, "Limpar cache",
+        "Excluir os arquivos temporarios do BlackVoice?", "Excluir",
+        "Cancelar", this,
+        juce::ModalCallbackFunction::create([this](int confirmed) {
+          if (!confirmed) return;
+          for (auto &f : AppPaths::cache().findChildFiles(
+                   juce::File::findFilesAndDirectories, false))
+            f.deleteRecursively();
+          saveStatus.setText("Cache local removido",
+                             juce::dontSendNotification);
+        }));
   };
   backupButton.onClick = [this] {
     auto f = AppPaths::data().getChildFile(
@@ -224,13 +290,14 @@ void SettingsPage::markDirty() {
   startTimer(550);
 }
 void SettingsPage::loadPreferences() {
-  auto loadToggle = [this](juce::ToggleButton &toggle, const char *key) {
+  const auto stored = settings.preferences();
+  auto loadToggle = [&stored](juce::ToggleButton &toggle, const char *key) {
     const auto fallback = toggle.getToggleState() ? "1" : "0";
-    toggle.setToggleState(settings.preference(key, fallback) == "1",
+    toggle.setToggleState(stored.getValue(key, fallback) == "1",
                           juce::dontSendNotification);
   };
-  auto loadCombo = [this](juce::ComboBox &combo, const char *key) {
-    combo.setSelectedId(settings.preference(key, juce::String(combo.getSelectedId()))
+  auto loadCombo = [&stored](juce::ComboBox &combo, const char *key) {
+    combo.setSelectedId(stored.getValue(key, juce::String(combo.getSelectedId()))
                             .getIntValue(),
                         juce::dontSendNotification);
   };
@@ -238,6 +305,14 @@ void SettingsPage::loadPreferences() {
   loadToggle(reduceAnimations, "reduceAnimations");
   loadToggle(showTips, "showTips");
   loadToggle(autoContext, "autoContext");
+  loadToggle(monitorInput, "monitorInput");
+  loadToggle(reconnect, "reconnect");
+  loadToggle(syncDevices, "syncDevices");
+  loadToggle(startWindows, "startWindows");
+  loadToggle(startMinimized, "startMinimized");
+  loadToggle(startTray, "startTray");
+  loadToggle(restorePreset, "restorePreset");
+  loadToggle(autoProcess, "autoProcess");
   loadToggle(cpuOptimization, "cpuOptimization");
   loadToggle(adaptiveQuality, "adaptiveQuality");
   loadToggle(economy, "economy");
@@ -250,21 +325,37 @@ void SettingsPage::loadPreferences() {
   loadCombo(themeBox, "theme");
   loadCombo(fontSize, "fontSize");
   loadCombo(scale, "scale");
+  loadCombo(quality, "quality");
+  loadCombo(buffer, "buffer");
+  loadCombo(sampleRate, "sampleRate");
+  loadCombo(audioMode, "audioMode");
+  loadCombo(channels, "channels");
   loadCombo(processPriority, "processPriority");
   loadCombo(meterRate, "meterRate");
   loadCombo(logLevel, "logLevel");
+  loadCombo(updateChannel, "updateChannel");
 }
 void SettingsPage::persistPreferences() {
-  auto saveToggle = [this](const char *key, const juce::ToggleButton &toggle) {
-    settings.setPreference(key, toggle.getToggleState() ? "1" : "0");
+  juce::StringPairArray values;
+  auto saveToggle = [&values](const char *key,
+                              const juce::ToggleButton &toggle) {
+    values.set(key, toggle.getToggleState() ? "1" : "0");
   };
-  auto saveCombo = [this](const char *key, const juce::ComboBox &combo) {
-    settings.setPreference(key, juce::String(combo.getSelectedId()));
+  auto saveCombo = [&values](const char *key, const juce::ComboBox &combo) {
+    values.set(key, juce::String(combo.getSelectedId()));
   };
   saveToggle("compact", compact);
   saveToggle("reduceAnimations", reduceAnimations);
   saveToggle("showTips", showTips);
   saveToggle("autoContext", autoContext);
+  saveToggle("monitorInput", monitorInput);
+  saveToggle("reconnect", reconnect);
+  saveToggle("syncDevices", syncDevices);
+  saveToggle("startWindows", startWindows);
+  saveToggle("startMinimized", startMinimized);
+  saveToggle("startTray", startTray);
+  saveToggle("restorePreset", restorePreset);
+  saveToggle("autoProcess", autoProcess);
   saveToggle("cpuOptimization", cpuOptimization);
   saveToggle("adaptiveQuality", adaptiveQuality);
   saveToggle("economy", economy);
@@ -277,9 +368,16 @@ void SettingsPage::persistPreferences() {
   saveCombo("theme", themeBox);
   saveCombo("fontSize", fontSize);
   saveCombo("scale", scale);
+  saveCombo("quality", quality);
+  saveCombo("buffer", buffer);
+  saveCombo("sampleRate", sampleRate);
+  saveCombo("audioMode", audioMode);
+  saveCombo("channels", channels);
   saveCombo("processPriority", processPriority);
   saveCombo("meterRate", meterRate);
   saveCombo("logLevel", logLevel);
+  saveCombo("updateChannel", updateChannel);
+  settings.setPreferences(values);
   if (onPreferencesChanged)
     onPreferencesChanged();
 }
@@ -314,6 +412,9 @@ void SettingsPage::restoreDefaults() {
   p.pitchSemitones = 0;
   p.fineCents = 0;
   p.formant = 0;
+  p.bassDb = 0;
+  p.midDb = 0;
+  p.trebleDb = 0;
   p.noiseReduction = .25f;
   p.distortion = 0;
   p.chorus = 0;
@@ -325,7 +426,7 @@ void SettingsPage::restoreDefaults() {
   markDirty();
 }
 void SettingsPage::paint(juce::Graphics &g) {
-  g.fillAll(theme::background);
+  theme::paintBackground(g, getLocalBounds());
   const juce::StringArray names{localization.text("settings.interface"),localization.text("settings.audio"),localization.text("settings.devices"),localization.text("settings.startup"),localization.text("settings.performance"),localization.text("settings.accessibility"),localization.text("settings.privacy"),localization.text("settings.updates")};
   const auto viewOffset=viewport.getPosition()-viewport.getViewPosition();
   juce::Graphics::ScopedSaveState state(g);

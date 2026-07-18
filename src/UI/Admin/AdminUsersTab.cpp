@@ -76,12 +76,14 @@ AdminUsersTab::AdminUsersTab(AdminSessionManager &s, UserManager &u)
     addChildComponent(saveBtn);
 
     blockBtn.setButtonText("Bloquear");
+    blockBtn.setComponentID("danger");
     blockBtn.setColour(juce::TextButton::buttonColourId, theme::elevated);
     blockBtn.setColour(juce::TextButton::textColourOffId, theme::yellow);
     blockBtn.onClick = [this] { blockUser(editingUser); };
     addChildComponent(blockBtn);
 
     removeBtn.setButtonText("Remover");
+    removeBtn.setComponentID("danger");
     removeBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     removeBtn.setColour(juce::TextButton::textColourOffId, theme::red);
     removeBtn.onClick = [this] { removeUser(editingUser); };
@@ -189,6 +191,11 @@ void AdminUsersTab::showUserEditor(const UserAccount &u) {
         if (notify) notify("Acesso negado");
         return;
     }
+    if (!u.id.isEmpty() && u.role == Role::SuperAdministrator &&
+        session.user().role != Role::SuperAdministrator) {
+        if (notify) notify("Somente um superadministrador pode editar essa conta");
+        return;
+    }
     editingUser = u;
     const bool isNew = u.id.isEmpty();
     editorHeading.setText(isNew ? juce::String::fromUTF8("Novo usuário")
@@ -222,15 +229,37 @@ void AdminUsersTab::saveUser(UserAccount u) {
         if (notify) notify(juce::String::fromUTF8("Nome é obrigatório"));
         return;
     }
+    const auto email = emailField.getText().trim();
+    if (email.isNotEmpty() &&
+        (!email.containsChar('@') || email.startsWithChar('@') ||
+         email.endsWithChar('@'))) {
+        if (notify) notify(juce::String::fromUTF8("E-mail inválido"));
+        return;
+    }
+    if (!u.id.isEmpty() && u.role == Role::SuperAdministrator &&
+        session.user().role != Role::SuperAdministrator) {
+        if (notify) notify("Somente um superadministrador pode alterar essa conta");
+        return;
+    }
     const bool isNew = u.id.isEmpty();
     if (isNew) {
         u.id      = juce::Uuid().toString();
         u.created = juce::Time::getCurrentTime();
     }
     u.name        = nameField.getText().trim();
-    u.email       = emailField.getText().trim();
-    u.role        = (Role)juce::jlimit(0, 3, roleCombo.getSelectedId() - 1);
-    u.status      = (UserStatus)juce::jlimit(0, 3, statusCombo.getSelectedId() - 1);
+    u.email       = email;
+    auto requestedRole = (Role)juce::jlimit(0, 3, roleCombo.getSelectedId() - 1);
+    auto requestedStatus =
+        (UserStatus)juce::jlimit(0, 3, statusCombo.getSelectedId() - 1);
+    if (u.id == session.user().id) {
+        requestedRole = session.user().role;
+        requestedStatus = UserStatus::Active;
+    } else if ((int)requestedRole > (int)session.user().role) {
+        if (notify) notify("Não é permitido conceder uma função superior à sua");
+        return;
+    }
+    u.role = requestedRole;
+    u.status = requestedStatus;
     u.lastAccess  = juce::Time::getCurrentTime();
     users.upsert(u);
     if (notify) notify(isNew ? juce::String::fromUTF8("Usuário criado")
@@ -241,19 +270,44 @@ void AdminUsersTab::saveUser(UserAccount u) {
 
 void AdminUsersTab::blockUser(UserAccount u) {
     if (!session.can(Permission::ManageUsers)) return;
+    if (u.role == Role::SuperAdministrator &&
+        session.user().role != Role::SuperAdministrator) {
+        if (notify) notify("Somente um superadministrador pode bloquear essa conta");
+        return;
+    }
     if (u.id == session.user().id) {
         if (notify) notify(juce::String::fromUTF8("Não é possível bloquear a conta atual"));
         return;
     }
-    u.status = u.status == UserStatus::Blocked ? UserStatus::Active : UserStatus::Blocked;
-    users.upsert(u);
-    if (notify) notify(juce::String::fromUTF8("Status alterado: ") + statusName(u.status));
-    cancelBtn.triggerClick();
-    refresh();
+    const bool willBlock = u.status != UserStatus::Blocked;
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon,
+        willBlock ? "Bloquear usuário" : "Reativar usuário",
+        (willBlock ? "Bloquear \"" : "Reativar \"") + u.name + "\"?",
+        willBlock ? "Bloquear" : "Reativar", "Cancelar", this,
+        juce::ModalCallbackFunction::create(
+            [this, u, willBlock](int confirmed) mutable {
+              if (!confirmed) return;
+              u.status = willBlock ? UserStatus::Blocked : UserStatus::Active;
+              if (!users.upsert(u)) {
+                if (notify) notify("Não foi possível alterar o status");
+                return;
+              }
+              if (notify)
+                notify(juce::String::fromUTF8("Status alterado: ") +
+                       statusName(u.status));
+              cancelBtn.triggerClick();
+              refresh();
+            }));
 }
 
 void AdminUsersTab::removeUser(const UserAccount &u) {
     if (!session.can(Permission::ManageUsers)) return;
+    if (u.role == Role::SuperAdministrator &&
+        session.user().role != Role::SuperAdministrator) {
+        if (notify) notify("Somente um superadministrador pode remover essa conta");
+        return;
+    }
     if (u.id == session.user().id) return;
     juce::AlertWindow::showOkCancelBox(
         juce::MessageBoxIconType::WarningIcon,

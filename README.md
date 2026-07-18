@@ -10,7 +10,7 @@ BlackVoice é um modificador de voz local para Windows 10/11 x64, escrito em C++
 
 Fluxo implementado:
 
-`microfone → HP/LP + atenuação de ruído estacionário → gate → compressor → pitch → distorção/ring/bit-crusher/chorus/delay/reverb → dry/wet → limitador → saída`
+`microfone → HP/LP + redução de ruído → EQ tonal de 3 bandas → gate → compressor → pitch/formante → distorção/ring/bit-crusher/flanger/chorus/delay/reverb → dry/wet → limitador → saída`
 
 O pitch usa duas cabeças de atraso granular defasadas, janelas Hann e crossfade. Assim, muda a altura sem mudar a velocidade global. A qualidade é apropriada para fala e baixa latência, mas não equivale a algoritmos comerciais de preservação espectral de formantes.
 
@@ -21,7 +21,9 @@ O pitch usa duas cabeças de atraso granular defasadas, janelas Hann e crossfade
 - Pitch ±12 semitons e ajuste fino, dry/wet, ganhos e inversão de fase.
 - Redução de ruído DSP, gate, passa-altas/baixas, compressor e limitador.
 - Distorção, chorus, delay, reverb, ring modulation e bit crusher.
-- 12 presets de fábrica e presets JSON do usuário.
+- 12 presets-base, 1.000 variações determinísticas e presets JSON do usuário, carregados sob demanda na UI.
+- Soundboard com pads dinâmicos e leitura antecipada em thread de background.
+- Favoritos, busca, categorias, paginação e teste de voz em tempo real.
 - Medidores, clipping, CPU aproximada, latência e underruns estimados.
 - Reconexão periódica ao último dispositivo após desconexão.
 - Tema escuro, bypass geral e relatório copiável.
@@ -99,7 +101,7 @@ Configurações: `%APPDATA%\BlackVoice\settings.json`. Presets: `%APPDATA%\Black
 
 ## Testes
 
-`ctest` cobre buffer vazio, bypass, limitador, limites de parâmetros, JSON inválido e round-trip de preset. Para teste manual sem microfone, use um cabo virtual ou reprodutor roteado como entrada WASAPI; o modo WAV offline ainda não está disponível nesta versão.
+`ctest` cobre buffer vazio, bypass, limitador, limites de parâmetros (incluindo EQ), JSON inválido, round-trip de preset, roteamento de páginas, detecção de cabos/aplicativos e autorização administrativa. Para teste manual sem microfone, use um cabo virtual ou reprodutor roteado como entrada WASAPI; o modo WAV offline ainda não está disponível nesta versão.
 
 O teste do roteador valida página atual, página anterior e supressão de transições duplicadas. Para percorrer todas as páginas do aplicativo automaticamente:
 
@@ -130,11 +132,13 @@ Checklist manual:
 ## Limitações conhecidas
 
 - Redução de ruído é DSP determinístico simples, não uma “IA”; reduz piso contínuo moderado, mas não separa fala de música/vozes.
-- O controle de formante está persistido e faz parte dos presets, porém a transformação espectral independente de formantes ainda não é aplicada pelo DSP.
-- Flanger, equalizador paramétrico de cinco bandas, de-esser, AGC, pan, gate hold, knee/makeup e modo WAV offline não estão implementados nesta versão.
-- Presets podem ser criados/sobrescritos; renomear, duplicar, excluir e importação/exportação pela UI ainda não estão expostos.
+- Pitch e formante usam algoritmos voltados a fala e baixa latência; não equivalem a processamento espectral comercial de estúdio.
+- O equalizador implementado possui HP/LP e graves/médios/agudos com cruzamentos fixos; filtros peak paramétricos livres, de-esser, AGC, pan, gate hold, knee/makeup e modo WAV offline não estão implementados.
+- Presets podem ser criados, salvos, copiados e excluídos; renomeação e importação/exportação em lote de presets individuais ainda não estão expostas.
 - WASAPI é escolhido pelo JUCE no Windows, mas o driver disponível e as taxas/buffers dependem do hardware.
 - Reconexão usa o último dispositivo do JUCE; a troca durante callback depende do backend e deve ser validada com o hardware alvo.
+- Bandeja do sistema, atualização automática e qualidade adaptativa aparecem desativadas e identificadas como indisponíveis enquanto não houver backend próprio.
+- O painel administrativo autentica apenas a identidade local do Windows; não substitui autenticação, autorização ou auditoria de um servidor.
 
 Esses itens são declarados para não confundir código presente com comportamento ainda não verificado.
 

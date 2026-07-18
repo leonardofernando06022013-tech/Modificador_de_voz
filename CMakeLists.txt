@@ -61,6 +61,7 @@ target_sources(BlackVoice PRIVATE
   src/Integrations/IntegrationProfileManager.h src/Integrations/IntegrationProfileManager.cpp
   src/Integrations/VirtualDeviceDetector.h src/Integrations/VirtualDeviceDetector.cpp
   src/Integrations/RoutingDiagnostics.h src/Integrations/RoutingDiagnostics.cpp
+  src/Integrations/ApplicationDetector.h src/Integrations/ApplicationDetector.cpp
   src/Platform/WindowsAudioSettingsLauncher.h
   src/App/AppPaths.h)
 target_include_directories(BlackVoice PRIVATE src)
@@ -70,7 +71,18 @@ target_link_libraries(BlackVoice PRIVATE juce::juce_audio_utils juce::juce_dsp j
 
 enable_testing()
 juce_add_console_app(BlackVoiceTests PRODUCT_NAME "BlackVoice Tests")
-target_sources(BlackVoiceTests PRIVATE tests/Tests.cpp src/DSP/VoiceProcessor.cpp src/Presets/PresetManager.cpp src/Settings/SettingsManager.cpp src/UI/Navigation/PageRouter.cpp src/Integrations/IntegrationProfile.cpp src/Integrations/VirtualDeviceDetector.cpp)
+target_sources(BlackVoiceTests PRIVATE
+  tests/Tests.cpp
+  src/DSP/VoiceProcessor.cpp
+  src/Presets/PresetManager.cpp
+  src/Settings/SettingsManager.cpp
+  src/UI/Navigation/PageRouter.cpp
+  src/Integrations/IntegrationProfile.cpp
+  src/Integrations/VirtualDeviceDetector.cpp
+  src/Integrations/ApplicationDetector.cpp
+  src/Admin/UserAccount.cpp
+  src/Admin/PermissionManager.cpp
+  src/Admin/AdminAccessController.cpp)
 target_include_directories(BlackVoiceTests PRIVATE src)
 target_compile_definitions(BlackVoiceTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_compile_options(BlackVoiceTests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)

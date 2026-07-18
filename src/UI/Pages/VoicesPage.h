@@ -28,6 +28,10 @@ private:
     Advanced
   };
   void applyVoice(int);
+  void applyVoiceByName(const juce::String &, bool preview = false);
+  void rebuildCards();
+  bool matchesFilter(const juce::String &) const;
+  juce::String languageFor(const juce::String &) const;
   void addCustomVoiceCard(const juce::String &, bool selectAfterAdding);
   void updateFilter();
   void markDirty();
@@ -43,7 +47,10 @@ private:
       favouriteButton{juce::String::fromUTF8("♡")},
       menuButton{juce::String::fromUTF8("•••")};
   juce::TextButton saveButton{"Salvar"}, resetButton{"Redefinir"};
+  juce::TextButton loadMore{"Mostrar mais vozes"};
   juce::OwnedArray<juce::TextButton> chips, accordions;
+  juce::ComboBox languageFilter;
+  juce::Label resultsLabel;
   juce::Viewport sectionViewport;
   juce::Component sectionContent;
   juce::Label sectionTitle, sectionBody;
@@ -52,8 +59,12 @@ private:
   juce::OwnedArray<VoiceCardComponent> cards;
   juce::OwnedArray<juce::Label> controlLabels, valueLabels;
   juce::OwnedArray<juce::Slider> sliders;
-  juce::String searchText, activeFilter{"Todas"};
+  juce::StringArray catalogNames;
+  juce::StringArray favouriteNames;
+  juce::String searchText, activeFilter{"Todas"}, selectedPresetName,
+      selectedPresetCategory;
   int selectedIndex = 0;
+  int visibleLimit = 72, matchingCount = 0;
   bool dirty = false;
   DetailsSection selectedSection = DetailsSection::Voice;
   juce::Rectangle<int> headerArea, filterArea, gridArea, detailsArea,

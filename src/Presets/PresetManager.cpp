@@ -80,6 +80,7 @@ void PresetManager::applyFactory(const juce::String &name, Parameters &p) const 
   p.pitchSemitones = 0; p.formant = 0; p.mix = 1; p.distortion = 0;
   p.chorus = 0; p.flanger = 0; p.delay = 0; p.reverb = 0; p.ringMod = 0;
   p.bitCrush = 0; p.hpFreq = 70; p.lpFreq = 18000;
+  p.bassDb = 0; p.midDb = 0; p.trebleDb = 0;
   p.compressorEnabled = true; p.compressorThreshold = -18; p.compressorRatio = 3;
 
   if (name.startsWith("Voz ")) {

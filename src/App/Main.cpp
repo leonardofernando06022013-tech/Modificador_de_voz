@@ -14,18 +14,36 @@ public:
     void initialise(const juce::String& commandLine) override {
         const auto stamp = juce::Time::getCurrentTime().toString(true, true, true, true);
         const auto utf8 = [] (const char* text) { return juce::String::fromUTF8(text); };
+        const auto preferences = settings.preferences();
+        const auto preference = [&preferences](const char *key,
+                                               const char *fallback) {
+            return preferences.getValue(key, fallback);
+        };
+        const bool saveLogs = preference("saveLogs", "1") == "1";
         const auto log = [&] (const juce::String& name, const juce::String& line) {
+            if (!saveLogs) return;
             AppPaths::logs().getChildFile(name).appendText(stamp + " | " + line + "\r\n");
         };
 
         log("startup.log", "Version 1.0.0 | " + juce::SystemStats::getOperatingSystemName()
             + " | " + juce::File::getSpecialLocation(juce::File::currentExecutableFile).getFullPathName());
         juce::LookAndFeel::setDefaultLookAndFeel(&look);
-        if (!settings.load(engine.parameters()))
+        if (preference("restorePreset", "1") == "1" &&
+            !settings.load(engine.parameters()))
             log("errors.log", "Arquivo de configuracao corrompido movido para backup");
         LocalizationManager::instance().initialise(settings);
 
         const auto error = engine.initialise();
+        if (error.isEmpty() && preference("autoProcess", "0") == "1")
+            engine.start();
+        if (error.isEmpty() && preference("monitorInput", "0") == "1") {
+            engine.start();
+            const auto monitorError = engine.setMonitoring(true);
+            if (monitorError.isNotEmpty()) {
+                log("errors.log", "Falha ao restaurar monitoramento: " + monitorError);
+                if (preference("autoProcess", "0") != "1") engine.stop();
+            }
+        }
         if (auto* device = engine.deviceManager().getCurrentAudioDevice())
             log("audio.log", device->getName() + " | " + juce::String(device->getCurrentSampleRate())
                 + " Hz | " + juce::String(device->getCurrentBufferSizeSamples()) + " samples");

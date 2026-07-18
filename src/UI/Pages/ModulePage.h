@@ -5,6 +5,8 @@
 #include "Settings/SettingsManager.h"
 #include "UI/ModernComponents.h"
 #include "UI/Navigation/PageRouter.h"
+#include "Integrations/ApplicationDetector.h"
+#include "Integrations/VirtualDeviceDetector.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 
 namespace vox {
@@ -24,18 +26,25 @@ private:
   void timerCallback() override;
   void setup();
   void selectSound(int);
+  void rebuildSoundPads();
   void rebuildFavorites();
   void buildEffects();
   void layoutCards();
+  void refreshHomeFavorites();
 
   Kind kind;
   AudioEngine &engine;
   PresetManager &presets;
   SettingsManager &settings;
   juce::Label title, description, status, emptyState;
+  juce::Label homeInput, homeOutput, homeVoice, homeIntegration;
   juce::TextButton primary, secondary, tertiary;
   juce::ComboBox presetList, soundList;
-  juce::Slider hp, lp, soundProgress;
+  juce::Slider hp, lp, bass, mid, treble, soundProgress;
+  juce::Slider homeInputGain, homeOutputGain, homeMix, homeNoise;
+  AudioLevelMeter homeInputMeter, homeOutputMeter;
+  juce::OwnedArray<juce::TextButton> homeFavorites;
+  juce::OwnedArray<juce::TextButton> soundPads;
   juce::Viewport cardViewport;
   juce::Component cardCanvas;
   juce::OwnedArray<VoiceCardComponent> cards;
@@ -43,7 +52,12 @@ private:
   juce::Array<juce::File> importedSounds;
   juce::File selectedSound;
   juce::String favouriteSignature;
+  juce::String homeFavouriteSignature;
+  int homeRefreshCounter = 19;
   bool favoritesInitialized = false;
   juce::Array<juce::Rectangle<int>> panels;
+  juce::Rectangle<int> equalizerGraphArea;
+  juce::Rectangle<int> homeHeroArea, homeStatsArea, homeControlsArea,
+      homeFavoritesArea;
 };
 } // namespace vox

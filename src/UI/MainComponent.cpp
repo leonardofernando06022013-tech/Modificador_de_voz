@@ -65,11 +65,24 @@ MainComponent::MainComponent(AudioEngine &audio, SettingsManager &settingsManage
   profile.setTooltip("Perfil local");
   notifications.setColour(juce::TextButton::textColourOffId, theme::red);
   profile.setColour(juce::TextButton::textColourOffId, theme::cyan);
+  notifications.onClick = [this] {
+    const auto error = engine.lastError();
+    if (error.isNotEmpty()) {
+      router.navigateTo(PageId::Diagnostics);
+      notification.showMessage("Ha um alerta de audio: " + error, true);
+    } else {
+      notification.showMessage("Nenhum alerta pendente.");
+    }
+  };
   helpButton.onClick = [this] {
     notification.showMessage("Use os tooltips para conhecer cada controle.");
   };
   topSettings.onClick = [this] { router.navigateTo(PageId::Settings); };
-  profile.onClick = [this] { notification.showMessage("Perfil local"); };
+  profile.onClick = [this] {
+    auto message = "Perfil local: " + juce::SystemStats::getLogonName();
+    if (adminPage && adminPage->hasAccess()) message += " (administrador)";
+    notification.showMessage(message);
+  };
   for (auto *button : {&notifications, &helpButton, &topSettings, &profile}) {
     button->setColour(juce::TextButton::buttonColourId,
                       juce::Colours::transparentBlack);
@@ -191,7 +204,6 @@ MainComponent::MainComponent(AudioEngine &audio, SettingsManager &settingsManage
 
   applyPreferences();
   showPage(PageId::Voices);
-  startTimerHz(settings.preference("reduceAnimations", "0") == "1" ? 10 : 30);
   updateTexts();
 }
 
@@ -203,11 +215,25 @@ MainComponent::~MainComponent() {
 }
 
 void MainComponent::applyPreferences() {
-  compactUi = settings.preference("compact", "0") == "1";
-  const bool reduceAnimations =
-      settings.preference("reduceAnimations", "0") == "1";
+  const auto preferences = settings.preferences();
+  const auto pref = [&preferences](const char *key, const char *fallback) {
+    return preferences.getValue(key, fallback);
+  };
+  compactUi = pref("compact", "0") == "1";
+  const bool reduceAnimations = pref("reduceAnimations", "0") == "1";
   theme::reduceAnimations.store(reduceAnimations);
-  startTimerHz(reduceAnimations ? 10 : 30);
+  theme::highContrast.store(pref("highContrast", "0") == "1");
+  theme::focusVisible.store(pref("focusVisible", "1") == "1");
+  theme::largeClickAreas.store(pref("largeClick", "0") == "1");
+  engine.setAutoReconnect(pref("reconnect", "1") == "1");
+  juce::Process::setPriority(pref("processPriority", "2") == "2"
+                                 ? juce::Process::HighPriority
+                                 : juce::Process::NormalPriority);
+  const int meterChoice = pref("meterRate", "2").getIntValue();
+  const int meterHz = meterChoice == 1 ? 20 : meterChoice == 3 ? 60 : 30;
+  startTimerHz(reduceAnimations ? 10 : meterHz);
+  tooltips.setMillisecondsBeforeTipAppears(
+      pref("showTips", "1") == "1" ? 500 : 60000);
   resized();
   repaint();
 }
@@ -267,7 +293,7 @@ bool MainComponent::runNavigationSmokeTest() {
   mark("integrations");
   if (!integrationsPage || !integrationsPage->runSmokeTest()) return false;
   mark("admin");
-  if (adminPage) adminPage->runSmokeTest();
+  if (adminPage && !adminPage->runSmokeTest()) return false;
   mark("modules");
   for (auto *module : {homePage.get(), effectsPage.get(), soundboardPage.get(),
                        favoritesPage.get(), equalizerPage.get(),
@@ -289,7 +315,7 @@ bool MainComponent::runNavigationSmokeTest() {
 }
 
 void MainComponent::paint(juce::Graphics &g) {
-  g.fillAll(theme::background);
+  theme::paintBackground(g, getLocalBounds());
   g.setColour(theme::secondary);
   g.fillRect(topBounds);
   g.fillRect(bottomBounds);
@@ -333,7 +359,9 @@ void MainComponent::resized() {
     button->setBounds(topRight - 40, 16, 38, 38);
     topRight -= 44;
   }
-  deviceStatus.setBounds(topRight - 270, 12, 270, 46);
+  const int deviceStatusWidth = getWidth() < 1150 ? 230 : 270;
+  deviceStatus.setBounds(topRight - deviceStatusWidth, 12, deviceStatusWidth,
+                         46);
 
   contentBounds = all.reduced(14);
   if (pageTitle.isVisible()) {
@@ -360,10 +388,14 @@ void MainComponent::resized() {
   bottomVoiceName.setBounds(voice.removeFromTop(22));
   bottomVoiceCategory.setBounds(voice.removeFromTop(17));
   deviceName.setBounds(voice);
-  power.setBounds(footer.removeFromLeft(88).reduced(9));
-  monitor.setBounds(footer.removeFromLeft(104).reduced(3, 5));
-  mute.setBounds(footer.removeFromLeft(98).reduced(3, 5));
-  bypass.setBounds(footer.removeFromLeft(78).reduced(3, 5));
+  const bool largeTargets = theme::largeClickAreas.load();
+  power.setBounds(footer.removeFromLeft(88).reduced(largeTargets ? 4 : 9));
+  monitor.setBounds(footer.removeFromLeft(104).reduced(largeTargets ? 1 : 3,
+                                                       largeTargets ? 2 : 5));
+  mute.setBounds(footer.removeFromLeft(98).reduced(largeTargets ? 1 : 3,
+                                                   largeTargets ? 2 : 5));
+  bypass.setBounds(footer.removeFromLeft(78).reduced(largeTargets ? 1 : 3,
+                                                     largeTargets ? 2 : 5));
   auto shortcuts = footer.removeFromRight(compactUi ? 220 : 300);
   auto stats = footer.removeFromRight(96);
   cpuLatency.setBounds(stats.reduced(5, 10));
@@ -372,7 +404,8 @@ void MainComponent::resized() {
   meter.setBounds(meterArea.reduced(0, 5));
   for (auto *button : {&shortcutDevices, &shortcutEffects, &shortcutEqualizer,
                        &shortcutSettings})
-    button->setBounds(shortcuts.removeFromLeft(compactUi ? 55 : 75).reduced(2, 5));
+    button->setBounds(shortcuts.removeFromLeft(compactUi ? 55 : 75).reduced(
+        largeTargets ? 1 : 2, largeTargets ? 2 : 5));
   notification.setBounds(getWidth() - 385, 82, 350, 54);
 }
 
@@ -392,6 +425,15 @@ void MainComponent::timerCallback() {
                          device ? theme::green : theme::red);
   monitor.setButtonText(engine.isMonitoring() ? "Parar escuta" : "Ouvir voz");
   mute.setButtonText(engine.parameters().muted.load() ? "Reativar" : "Silenciar");
+  power.setButtonText(engine.isRunning() ? "DESLIGAR" : "ATIVAR");
+  power.setColour(juce::TextButton::buttonColourId,
+                  engine.isRunning() ? theme::green : theme::blue);
+  mute.setColour(juce::TextButton::buttonColourId,
+                 engine.parameters().muted.load() ? theme::red
+                                                   : theme::panel);
+  bypass.setColour(juce::TextButton::buttonColourId,
+                   engine.parameters().bypass.load() ? theme::yellow
+                                                      : theme::panel);
   status.setText(engine.isRunning() ? "ENTRADA / SAÍDA EM TEMPO REAL"
                                     : "MODIFICADOR DESLIGADO",
                  juce::dontSendNotification);
