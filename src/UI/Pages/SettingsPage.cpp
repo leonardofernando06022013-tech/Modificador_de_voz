@@ -101,6 +101,7 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
   autoUpdates.setEnabled(false);
   autoUpdates.setTooltip("Nenhum servidor de atualizacao foi configurado.");
   loadPreferences();
+  engine.parameters().economyMode = economy.getToggleState();
   for (auto *unsupported : {&autoContext, &syncDevices, &startTray,
                             &adaptiveQuality, &autoUpdates})
     unsupported->setToggleState(false, juce::dontSendNotification);
@@ -126,6 +127,7 @@ SettingsPage::SettingsPage(AudioEngine &e, SettingsManager &s)
     markDirty();
   };
   economy.onClick = [this] {
+    engine.parameters().economyMode = economy.getToggleState();
     if (economy.getToggleState())
       buffer.setSelectedId(4, juce::sendNotificationSync);
     markDirty();
@@ -416,6 +418,12 @@ void SettingsPage::restoreDefaults() {
   p.midDb = 0;
   p.trebleDb = 0;
   p.noiseReduction = .25f;
+  p.deEsserAmount = .35f;
+  p.agcAmount = 0;
+  p.multibandAmount = 0;
+  p.gateHold = 70;
+  p.formantPreserve = true;
+  p.economyMode = false;
   p.distortion = 0;
   p.chorus = 0;
   p.delay = 0;
@@ -423,6 +431,7 @@ void SettingsPage::restoreDefaults() {
   p.ringMod = 0;
   p.bitCrush = 0;
   p.limiterEnabled = true;
+  economy.setToggleState(false, juce::dontSendNotification);
   markDirty();
 }
 void SettingsPage::paint(juce::Graphics &g) {

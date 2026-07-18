@@ -16,6 +16,7 @@ juce::var SettingsManager::parametersToJson(const Parameters &p) {
   P(gateThreshold);
   P(gateAttack);
   P(gateRelease);
+  P(gateHold);
   P(compressorThreshold);
   P(compressorRatio);
   P(compressorAttack);
@@ -23,9 +24,12 @@ juce::var SettingsManager::parametersToJson(const Parameters &p) {
   P(hpFreq);
   P(lpFreq);
   P(noiseReduction);
+  P(deEsserAmount);
   P(bassDb);
   P(midDb);
   P(trebleDb);
+  P(agcAmount);
+  P(multibandAmount);
   P(distortion);
   P(chorus);
   P(flanger);
@@ -40,6 +44,8 @@ juce::var SettingsManager::parametersToJson(const Parameters &p) {
   P(compressorEnabled);
   P(limiterEnabled);
   P(phaseInvert);
+  P(formantPreserve);
+  P(economyMode);
 #undef P
   return juce::var(o);
 }
@@ -59,6 +65,7 @@ bool SettingsManager::jsonToParameters(const juce::var &v, Parameters &p) {
   F(gateThreshold, -80, 0);
   F(gateAttack, 0.1, 200);
   F(gateRelease, 1, 2000);
+  F(gateHold, 0, 500);
   F(compressorThreshold, -60, 0);
   F(compressorRatio, 1, 20);
   F(compressorAttack, 0.1, 200);
@@ -66,9 +73,12 @@ bool SettingsManager::jsonToParameters(const juce::var &v, Parameters &p) {
   F(hpFreq, 20, 2000);
   F(lpFreq, 2000, 20000);
   F(noiseReduction, 0, 1);
+  F(deEsserAmount, 0, 1);
   F(bassDb, -12, 12);
   F(midDb, -12, 12);
   F(trebleDb, -12, 12);
+  F(agcAmount, 0, 1);
+  F(multibandAmount, 0, 1);
   F(distortion, 0, 1);
   F(chorus, 0, 1);
   F(flanger, 0, 1);
@@ -87,6 +97,8 @@ bool SettingsManager::jsonToParameters(const juce::var &v, Parameters &p) {
   B(compressorEnabled);
   B(limiterEnabled);
   B(phaseInvert);
+  B(formantPreserve);
+  B(economyMode);
 #undef B
   return true;
 }

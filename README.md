@@ -6,27 +6,38 @@ BlackVoice é um modificador de voz local para Windows 10/11 x64, escrito em C++
 
 ## Arquitetura
 
-`AudioEngine` gerencia o `AudioDeviceManager`/WASAPI e a callback. `VoiceProcessor` executa ganho, limpeza espectral DSP, gate, compressor, pitch granular, efeitos, mistura e limitador. Os parâmetros são atômicos e suavizados onde a alteração produziria degraus. `PresetManager` e `SettingsManager` fazem I/O JSON somente fora da thread de áudio. A UI lê medidores atômicos por timer. A callback não acessa disco, GUI ou logs e reutiliza buffers preparados previamente.
+`AudioEngine` gerencia o `AudioDeviceManager`/WASAPI e a callback. `VoiceProcessor` executa ganho, limpeza adaptativa, EQ, gate, de-esser, AGC, compressão, pitch, efeitos, mistura e limitador. Os parâmetros são atômicos e os controles perceptivamente sensíveis usam rampas. `PresetManager` e `SettingsManager` fazem I/O JSON somente fora da thread de áudio. A UI lê medidores atômicos por timer. A callback não acessa disco, GUI ou logs, não cria visões temporárias de buffers e reutiliza toda a memória preparada em `audioDeviceAboutToStart`.
 
 Fluxo implementado:
 
-`microfone → HP/LP + redução de ruído → EQ tonal de 3 bandas → gate → compressor → pitch/formante → distorção/ring/bit-crusher/flanger/chorus/delay/reverb → dry/wet → limitador → saída`
+`microfone → HP/LP + redução adaptativa → EQ tonal → gate com hold/histerese → de-esser → AGC opcional → compressor → multibanda opcional → pitch/LPC → efeitos → dry/wet → limitador −0,5 dBFS → saída`
 
-O pitch usa duas cabeças de atraso granular defasadas, janelas Hann e crossfade. Assim, muda a altura sem mudar a velocidade global. A qualidade é apropriada para fala e baixa latência, mas não equivale a algoritmos comerciais de preservação espectral de formantes.
+O pitch usa duas cabeças de atraso granulares por canal, janelas Hann, crossfade e rampa de 35–40 ms. No modo de preservação de formantes, um envelope LPC de ordem 10 é extraído, o resíduo é transposto e o envelope é reaplicado. Esse modo limita a transposição a ±6 semitons; presets criativos podem desativá-lo e usar até ±12. A implementação é voltada à fala e baixa latência, não substitui algoritmos espectrais comerciais de estúdio.
 
 ## Recursos
 
 - WASAPI, seleção de entrada/saída, sample rate, buffer e canais pela tela Dispositivos.
 - 44,1/48 kHz e buffers 128/256/512/1024 quando oferecidos pelo driver.
 - Pitch ±12 semitons e ajuste fino, dry/wet, ganhos e inversão de fase.
-- Redução de ruído DSP, gate, passa-altas/baixas, compressor e limitador.
+- Redução de ruído adaptativa, gate com hold/histerese, de-esser de 5–9 kHz, AGC, compressor de banda única, multibanda de duas bandas e limitador.
 - Distorção, chorus, delay, reverb, ring modulation e bit crusher.
-- 12 presets-base, 1.000 variações determinísticas e presets JSON do usuário, carregados sob demanda na UI.
+- 18 presets-base, incluindo seis perfis profissionais, 1.000 variações determinísticas e presets JSON do usuário, carregados sob demanda na UI.
 - Soundboard com pads dinâmicos e leitura antecipada em thread de background.
 - Favoritos, busca, categorias, paginação e teste de voz em tempo real.
 - Medidores, clipping, CPU aproximada, latência e underruns estimados.
 - Reconexão periódica ao último dispositivo após desconexão.
 - Tema escuro, bypass geral e relatório copiável.
+
+## Presets de voz profissional
+
+- **Conversação Natural:** identidade intacta, limpeza e dinâmica leves, sem pitch ou reverberação.
+- **Podcast:** de-esser, AGC e multibanda moderados, corpo e presença discretos.
+- **Narração:** corpo reforçado, compressão estável e ambiente quase imperceptível.
+- **Voz Quente:** shelf grave, saturação muito leve e agudos suavizados.
+- **Voz Robusta:** gate tolerante, controle multibanda e nível mais consistente.
+- **Baixo consumo:** desliga LPC, AGC e multibanda; mantém limpeza, de-esser e compressão essenciais.
+
+Presets e configurações antigas continuam compatíveis: campos novos ausentes no JSON recebem os valores seguros definidos em `Parameters`.
 
 ## Requisitos de desenvolvimento
 
@@ -101,7 +112,18 @@ Configurações: `%APPDATA%\BlackVoice\settings.json`. Presets: `%APPDATA%\Black
 
 ## Testes
 
-`ctest` cobre buffer vazio, bypass, limitador, limites de parâmetros (incluindo EQ), JSON inválido, round-trip de preset, roteamento de páginas, detecção de cabos/aplicativos e autorização administrativa. Para teste manual sem microfone, use um cabo virtual ou reprodutor roteado como entrada WASAPI; o modo WAV offline ainda não está disponível nesta versão.
+`ctest` cobre buffer vazio, bypass, região ativa pré-alocada, limitador, blocos de 1–256 amostras, independência estéreo no pitch, seletividade do de-esser, limites de parâmetros, JSON inválido, round-trip dos novos parâmetros, presets profissionais, roteamento de páginas, detecção de cabos/aplicativos e autorização administrativa. Para teste manual sem microfone, use um cabo virtual ou reprodutor roteado como entrada WASAPI; o modo WAV offline ainda não está disponível nesta versão.
+
+Para comparar gravações PCM WAV de até 10 segundos e obter SNR e latência alinhados:
+
+```powershell
+python .\scripts\audio_metrics.py `
+  --reference .\samples\clean.wav `
+  --before .\samples\unprocessed.wav `
+  --after .\samples\podcast.wav
+```
+
+Os três arquivos precisam conter a mesma fala e usar a mesma sample rate. O script procura até 250 ms de atraso, compensa ganho constante antes do cálculo de SNR e imprime JSON com SNR antes/depois, melhoria, latência e latência adicionada.
 
 O teste do roteador valida página atual, página anterior e supressão de transições duplicadas. Para percorrer todas as páginas do aplicativo automaticamente:
 
@@ -131,9 +153,9 @@ Checklist manual:
 
 ## Limitações conhecidas
 
-- Redução de ruído é DSP determinístico simples, não uma “IA”; reduz piso contínuo moderado, mas não separa fala de música/vozes.
-- Pitch e formante usam algoritmos voltados a fala e baixa latência; não equivalem a processamento espectral comercial de estúdio.
-- O equalizador implementado possui HP/LP e graves/médios/agudos com cruzamentos fixos; filtros peak paramétricos livres, de-esser, AGC, pan, gate hold, knee/makeup e modo WAV offline não estão implementados.
+- Redução de ruído é um expansor causal com estimativa adaptativa do piso, não uma “IA” nem supressão FFT; reduz ruído contínuo moderado, mas não separa fala de música ou outras vozes.
+- A preservação LPC mantém melhor o envelope vocal em mudanças moderadas, mas não equivale a PSOLA/phase-vocoder comercial e permanece limitada a ±6 semitons no modo natural.
+- O equalizador em tempo real é minimum-phase, com HP/LP e cruzamentos tonais fixos. EQ linear-phase/offline, bandas peak livremente ajustáveis, pan e modo WAV offline ainda não estão implementados.
 - Presets podem ser criados, salvos, copiados e excluídos; renomeação e importação/exportação em lote de presets individuais ainda não estão expostas.
 - WASAPI é escolhido pelo JUCE no Windows, mas o driver disponível e as taxas/buffers dependem do hardware.
 - Reconexão usa o último dispositivo do JUCE; a troca durante callback depende do backend e deve ser validada com o hardware alvo.

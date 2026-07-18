@@ -1,5 +1,7 @@
 /build/
+/build-*/
 /dist/
 /.vs/
+__pycache__/
 *.user
 *.VC.db
